@@ -15,7 +15,7 @@ gives personal advice, never guarantees outcomes.
 
 - No new dependency without written justification in the commit message explaining why an
   existing dependency or built-in can't do the job.
-- Pure functions for all calculation logic. No hidden state, no I/O inside `src/lib/tax/`.
+- Pure functions for all calculation logic. No hidden state, no I/O inside `src/lib/calculators/`.
 - Server components by default. Only add `"use client"` where interactivity requires it.
 - Reuse existing components (`src/components/ui/`) before adding new ones.
 - No features outside the v1 scope below, ever, without an explicit human request.
@@ -42,13 +42,21 @@ record it in `PROGRESS.md` under "BLOCKED" rather than building it.
 
 ## 4. Calculation rules
 
-- All tax logic lives in pure, deterministic, tested functions under `src/lib/tax/`.
+- All tax logic lives in pure, deterministic, tested functions under `src/lib/calculators/`.
+  Zero React, zero I/O, zero Supabase in that directory — every function takes its config as
+  an explicit parameter (no importing "the current year" inside engine code).
 - All rates/thresholds live in versioned config files under
-  `src/lib/tax/config/FY2025-26.ts` — one file per financial year. Never inline a rate or
-  threshold in a calculation function; always import it from config.
-- Every assumption a calculation makes must be documented as a comment on the config value or
-  function it affects.
+  `src/lib/tax-config/fy2025-26.ts` (one file per financial year, `TaxYearConfig` type in
+  `src/lib/tax-config/types.ts`). Never inline a rate or threshold in a calculation function;
+  always import it from config. Every value is a `SourcedValue<T>` (an ATO source URL plus a
+  `verified` flag — see `fy2025-26.ts` for which values still need human reconfirmation).
+- Every assumption a calculation makes must be documented in the function's JSDoc and, where
+  useful, surfaced in its return type (e.g. an `assumptions: string[]` field).
 - Every threshold must have a boundary test (one cent below, at, one cent above).
+- Currency: convert dollars to integer cents once at the input boundary, accumulate in cents,
+  round once per intermediate value, convert back to dollars only at the output boundary —
+  see `src/lib/calculators/money.ts`. Never accumulate rounded dollar floats across a loop.
+- Every engine's result includes `financialYear` and `isEstimate: true`.
 
 ## 5. Privacy
 
@@ -82,7 +90,7 @@ rule should bend.
    business structure; investment property count; super contribution habits; expense
    categories; other income). Stored per user. Drives which content/calculators/checklists
    are surfaced. Never generates advice.
-2. **Calculators** (pure engine in `src/lib/tax/` + thin client UI each):
+2. **Calculators** (pure engine in `src/lib/calculators/` + thin client UI each):
    - Contractor take-home pay (day rate → annual, PAYG vs ABN/company, Medicare levy, super
      guarantee)
    - Income tax + super estimate (incl. Division 293 exposure above $250k)
@@ -118,7 +126,7 @@ their owner.
 | Styling | Tailwind CSS v4 + shadcn/ui (on `@base-ui/react`, not Radix — this shadcn version's default) |
 | Validation | Zod (v4), shared schemas in `src/lib/validation/` |
 | Forms | `react-hook-form` + `@hookform/resolvers/zod`. shadcn's `form.tsx` wrapper isn't in this registry version; a small local wrapper lives in `src/components/ui/form.tsx` once the first form needs it. |
-| Testing | Vitest for unit tests (100% coverage enforced on `src/lib/tax/`), Playwright for 5–8 critical-path e2e flows only |
+| Testing | Vitest for unit tests (100% coverage enforced on `src/lib/calculators/`), Playwright for 5–8 critical-path e2e flows only |
 | Package manager | npm only. Some devDependencies require `--legacy-peer-deps` due to a shadcn/babel peer-range conflict on this Next 16 snapshot — this is dev-tooling only, no runtime impact. |
 | Hosting | Vercel |
 | Local dev DB | Supabase CLI (`supabase start`, requires Docker Desktop running) |
@@ -145,8 +153,8 @@ src/
   app/                     routes (App Router)
   components/ui/           shadcn/ui primitives (generated, treat as vendored)
   components/              app-specific shared components (Disclaimer, nav, etc.)
-  lib/tax/                 pure calculation engines
-  lib/tax/config/          FY-versioned rate/threshold tables
+  lib/calculators/         pure calculation engines (zero React/I/O/Supabase)
+  lib/tax-config/          FY-versioned rate/threshold tables + TaxYearConfig type
   lib/validation/          shared Zod schemas
   lib/disclaimers/         <Disclaimer /> component + standard text
   lib/supabase/            Supabase client factories (browser/server)

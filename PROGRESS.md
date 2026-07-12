@@ -189,10 +189,110 @@
     suite (sign-up → profile → calculator → save scenario) is scheduled to close — flagging it
     now rather than glossing over it.
 
-### Next up — Day 3
+## Day 3 — FY2025-26 Tax Configuration + Calculation Engines (2026-07-12)
 
-FY2025-26 tax config + income tax / Medicare / Div 293 / super engines with exhaustive
-boundary tests, then **⛔ Human Gate 1**.
+### Restructuring: `src/lib/tax/` → `src/lib/calculators/` + `src/lib/tax-config/`
+
+Day 1's `CLAUDE.md` originally specified `src/lib/tax/` (engines) and
+`src/lib/tax/config/FY2025-26.ts` (rates). This Day 3 message explicitly specified
+`src/lib/calculators/` and `src/lib/tax-config/fy2025-26.ts` instead. Followed the newer,
+explicit instruction: deleted the old `src/lib/tax/` (just the Day 1 `round.ts` smoke-test
+util, superseded below), updated `CLAUDE.md`'s "Calculation rules" and "Directory structure"
+sections to match, and repointed `vitest.config.ts`'s coverage `include`/`exclude` at the new
+path. Logged here rather than silently diverging from what Day 1 wrote down.
+
+### Built
+
+- **`src/lib/tax-config/types.ts`**: `TaxBracket`, `SourcedValue<T>` (value + ATO source URL +
+  `verified: boolean` + optional `note`), `TaxYearConfig`.
+- **`src/lib/tax-config/fy2025-26.ts`**: see the Human Gate 1 table below for every value,
+  source, and verification status.
+- **`src/lib/calculators/money.ts`**: `toCents`/`toDollars` - the one rounding policy every
+  engine uses (accumulate in integer cents, round once per intermediate value, convert to
+  dollars only at the output boundary). Also normalizes `-0` to `0` (see "Deviations" below).
+- **`calculateIncomeTax`** (`income-tax.ts`): brackets + LITO (non-refundable, capped at gross
+  tax) + Medicare levy (with the standard 10%-shade-in low-income reduction). Also exports
+  `marginalRateAt`, used by the property cash-flow engine. Itemized `breakdown` per bracket,
+  not just a total.
+- **`calculateContractorTakeHome`** (`contractor-take-home.ts`): day rate × days/week ×
+  weeks/year (defaults to 48 weeks - see assumptions in the file) → gross/super/assessable/tax/
+  net. Handles both `inclusive` (back out super from a total package: `super = total *
+  sgRate/(1+sgRate)`) and `exclusive` (super paid on top) treatments. Deliberately has **no**
+  PAYG/ABN/company "structure" input - that comparison is Day 4's job; this engine is the
+  single building block it will call.
+- **`calculatePropertyCashFlow`** (`property-cash-flow.ts`): rent/expenses/interest/
+  depreciation → taxable rental result, cash-only result (depreciation excluded - it's
+  non-cash), and the tax effect at the investor's marginal rate (via `marginalRateAt`).
+  Every result carries `isEstimate: true` and an explicit "pre-advice estimate" assumption
+  string, per the brief's labelling requirement.
+- **`calculateDiv293`** (`div293.ts`): combined income (taxable income + concessional
+  contributions) vs. the $250,000 threshold; low-tax contributions capped at the concessional
+  cap (excess contributions are excluded - they're assessed separately at marginal rates,
+  not the 15% Division 293 rate).
+
+### Deviations / things worth knowing
+
+- **HELP/STSL excluded from this config.** The brief scoped it conditionally ("if in scope
+  for the take-home calculator"), and I wasn't confident enough in the exact FY2025-26
+  indexed repayment thresholds to include them without guessing — HELP reform in the 2025
+  Budget materially raised the minimum repayment threshold, and I don't have a verified
+  precise figure for this financial year. Rather than fabricate a plausible-looking number,
+  I left it out entirely. **Needs a decision at Gate 1**: is HELP/STSL modeling wanted for
+  the contractor take-home calculator? If yes, I'll source it properly (ideally from a live
+  ATO lookup) before adding it.
+- **`-0` rounding bug caught by a test, not inspection**: `calculatePropertyCashFlow`'s
+  all-zero-inputs test failed with `expected -0 to be +0` — `Math.round(-0 * rate)` produces
+  negative zero, which would have rendered as "-$0.00" in the UI. Fixed generically in
+  `money.ts`'s `toDollars` (`cents / 100 || 0`) rather than patching just the one call site,
+  since any engine subtracting to exactly zero before a rate multiplication could hit this.
+- **Dead code found via coverage, not deleted, converted into a real guard**: `marginalRateAt`
+  originally had a fallback `return` after its bracket loop that could never execute with a
+  valid config (the last bracket always has `max: null` and always matches). Per the
+  constitution's "don't add handling for scenarios that can't happen," I didn't want
+  unreachable code sitting there unexercised - but a config file *is* hand-authored, so a
+  future edit that drops the trailing `max: null` bracket is a plausible mistake worth
+  guarding against. Rewrote it as an explicit invariant check that throws a descriptive error,
+  and added one test that intentionally passes a malformed config to exercise that throw.
+  100% coverage achieved honestly, not by weakening the check.
+
+### Human Gate 1 — FY2025-26 config values for sign-off
+
+**⛔ Please review before any calculator UI is built on top of this config (Day 4-5).**
+
+| Value | FY2025-26 figure | Status | Source |
+|---|---|---|---|
+| Income tax brackets | 0% to $18,200 / 16% to $45,000 / 30% to $135,000 / 37% to $190,000 / 45% above | ✅ Matches the checksum supplied for this task | ato.gov.au/tax-rates-and-codes/tax-rates-australian-residents |
+| Medicare levy rate | 2% | ✅ High confidence (unchanged since 2014) | ato.gov.au/individuals-and-families/medicare-and-private-health-insurance/medicare-levy |
+| Medicare levy low-income thresholds (single) | Lower $27,222 / upper $34,027 | ⚠️ **NOT independently reconfirmed for FY2025-26** - carried forward from the last confirmed FY2024-25 figures. These are indexed annually; please verify against the ATO before relying on this. | ato.gov.au/.../medicare-levy-reduction-for-low-income-earners |
+| LITO (Low Income Tax Offset) | Max $700; full to $37,500; tapers 5c/$1 to $45,000 ($325); tapers 1.5c/$1 to $66,667 ($0) | ✅ High confidence - unchanged since the FY2020-21 LITO redesign, not indexed | ato.gov.au/.../low-income-tax-offset |
+| Super Guarantee rate | 12% | ✅ High confidence - final legislated step, matches the figure given in this task's brief | ato.gov.au/rates/key-superannuation-rates-and-thresholds/ |
+| Concessional contributions cap | $30,000 | ✅ Matches the figure given in this task's brief; no indexation trigger identified for FY2025-26 | ato.gov.au/rates/key-superannuation-rates-and-thresholds/ |
+| Division 293 threshold | $250,000 | ✅ High confidence - fixed, not indexed, unchanged since FY2017-18 | ato.gov.au/rates/key-superannuation-rates-and-thresholds/ |
+| Division 293 rate | 15% | ✅ High confidence | ato.gov.au/rates/key-superannuation-rates-and-thresholds/ |
+| HELP/STSL thresholds | *excluded* | ⚠️ Deferred - see "Deviations" above | — |
+
+Two more things worth flagging while reviewing: (1) the ATO URLs above are the general pages
+I'm confident cover each topic from memory, but ATO restructures its site periodically -
+worth a quick click-through rather than assuming the exact path is still live; (2) Medicare
+levy modeling here is single-person, standard (non-senior/pensioner) thresholds only - no
+family thresholds, no Medicare Levy Surcharge - which matches this task's scope but is worth
+confirming is still the intended v1 boundary.
+
+### Verification
+
+- Full quality loop green: `typecheck && lint && test:coverage && build`.
+- **100% statement/branch/function/line coverage** on `src/lib/calculators/` (55 tests across
+  4 engine files), enforced by `vitest.config.ts`'s thresholds - not just claimed.
+- Every threshold has a below/at/above boundary test with the exact expected cent value
+  hand-computed in a comment next to the assertion (see `income-tax.test.ts`'s bracket-boundary
+  block for all five brackets, `div293.test.ts` for the $250,000 threshold).
+- One golden-file test per engine, each with a fully hand-computed expected value in a comment:
+  $100,000 income tax ($22,788 net), $800/day×192 days exclusive-super take-home ($112,358
+  net), a negatively-geared property ($4,110 after-tax cash flow), and $240k/$25k Division 293
+  ($2,250 additional tax). The contractor take-home test additionally cross-checks its
+  inclusive-super golden value against the income-tax golden value (both reduce to exactly
+  $100,000 assessable income) as an internal consistency check.
+- No UI touched this day; stub pages from Day 2 are unchanged.
 
 ## Human gates (for reference)
 

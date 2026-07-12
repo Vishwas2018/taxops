@@ -14,8 +14,8 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],
-      include: ["src/lib/tax/**/*.ts"],
-      exclude: ["src/lib/tax/**/*.test.ts", "src/lib/tax/config/**"],
+      include: ["src/lib/calculators/**/*.ts"],
+      exclude: ["src/lib/calculators/**/*.test.ts"],
       thresholds: {
         lines: 100,
         statements: 100,
