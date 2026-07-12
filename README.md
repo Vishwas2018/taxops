@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TaxOps
 
-## Getting Started
+An Australian-focused educational SaaS portal for daily-rate contractors and property
+investors: guided tax profile, calculators, EOFY checklists, and a tax tips knowledge base.
 
-First, run the development server:
+**TaxOps is educational only.** It never lodges returns, never submits to the ATO, never
+gives personal advice, and never guarantees outcomes. Every calculator, checklist, and
+article carries a disclaimer directing users to a registered tax agent.
+
+See [`CLAUDE.md`](./CLAUDE.md) for the full project constitution (scope, stack decisions,
+disclaimer rules, calculation rules) and [`PROGRESS.md`](./PROGRESS.md) for build status.
+
+## Stack
+
+Next.js 16 (App Router, TypeScript strict) · Supabase (Postgres, Auth, RLS) · Tailwind CSS +
+shadcn/ui · Zod · Vitest · Playwright · Vercel.
+
+## Getting started
+
+Requirements: Node 20+, npm, Docker Desktop (for local Supabase), Supabase CLI.
 
 ```bash
+npm install
+
+# start local Supabase (Postgres + Auth), requires Docker Desktop running
+npx supabase start
+
+# copy the local Supabase URL/anon key printed above into .env.local
+cp .env.local.example .env.local
+
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | Purpose |
+|---|---|
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm test` | Vitest unit tests (single run) |
+| `npm run test:watch` | Vitest in watch mode |
+| `npm run test:coverage` | Vitest with coverage (100% enforced on `src/lib/tax/`) |
+| `npm run e2e` | Playwright critical-path e2e suite |
 
-## Learn More
+Run the full quality loop before committing:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run typecheck && npm run lint && npm test && npm run build
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project layout
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+See the "Directory structure" section of [`CLAUDE.md`](./CLAUDE.md).
 
-## Deploy on Vercel
+## Database
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Schema and RLS policies live in `supabase/migrations/`. Every user-owned table has RLS
+restricting rows to their owner. See `supabase/seed.sql` for local dev seed data.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Deployment
+
+Hosted on Vercel. Production Supabase project and environment variables are provisioned at
+the Day 10 human gate — see `PROGRESS.md`.
