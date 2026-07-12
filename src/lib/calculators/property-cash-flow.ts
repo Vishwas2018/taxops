@@ -1,5 +1,4 @@
 import type { TaxYearConfig } from "@/lib/tax-config/types";
-import { marginalRateAt } from "./income-tax";
 import { toCents, toDollars } from "./money";
 
 export interface PropertyCashFlowInput {
@@ -11,9 +10,11 @@ export interface PropertyCashFlowInput {
   /** From a depreciation schedule (see the depreciation calculator) - supplied here, not
    * computed. */
   annualDepreciation: number;
-  /** The investor's taxable income from all other sources, used to find their marginal
-   * rate for this property's tax effect. */
-  otherTaxableIncome: number;
+  /** The investor's marginal tax rate (0-1), chosen directly by the caller - e.g. from a
+   * bracket-rate select populated from `config.incomeTaxBrackets` - rather than derived from
+   * a whole taxable-income figure. This avoids the ambiguity of picking a single income
+   * value to represent a bracket that spans a wide range. */
+  marginalTaxRate: number;
 }
 
 export interface PropertyCashFlowResult {
@@ -42,16 +43,20 @@ export interface PropertyCashFlowResult {
  * spent on it.
  *
  * Assumptions (not modeled - out of v1 scope):
- * - Marginal tax rate is approximated using the rate applicable at `otherTaxableIncome`; it
- *   does not model this property's own result pushing the investor into a different bracket.
+ * - The caller supplies the marginal rate directly; this engine does not model this
+ *   property's own result shifting the investor into a different bracket.
  * - No capital gains tax, loan principal repayments, land tax, or depreciation recapture on
- *   sale.
+ *   sale, or borrowing-cost amortization.
  * - Pre-advice estimate only.
  */
 export function calculatePropertyCashFlow(
   input: PropertyCashFlowInput,
   config: TaxYearConfig,
 ): PropertyCashFlowResult {
+  if (input.marginalTaxRate < 0 || input.marginalTaxRate > 1) {
+    throw new Error("marginalTaxRate must be between 0 and 1");
+  }
+
   const rentCents = toCents(input.annualRentalIncome);
   const expensesCents = toCents(input.annualExpenses);
   const interestCents = toCents(input.annualLoanInterest);
@@ -60,8 +65,7 @@ export function calculatePropertyCashFlow(
   const netRentalResultCents = rentCents - expensesCents - interestCents - depreciationCents;
   const cashOnlyResultCents = rentCents - expensesCents - interestCents;
 
-  const marginalTaxRate = marginalRateAt(Math.max(0, input.otherTaxableIncome), config);
-  const taxEffectCents = Math.round(-netRentalResultCents * marginalTaxRate);
+  const taxEffectCents = Math.round(-netRentalResultCents * input.marginalTaxRate);
   const afterTaxCashFlowCents = cashOnlyResultCents + taxEffectCents;
 
   return {
@@ -69,14 +73,14 @@ export function calculatePropertyCashFlow(
     isEstimate: true,
     netRentalResult: toDollars(netRentalResultCents),
     isNegativelyGeared: netRentalResultCents < 0,
-    marginalTaxRate,
+    marginalTaxRate: input.marginalTaxRate,
     taxEffect: toDollars(taxEffectCents),
     cashOnlyResult: toDollars(cashOnlyResultCents),
     afterTaxCashFlow: toDollars(afterTaxCashFlowCents),
     assumptions: [
       "Depreciation is a non-cash deduction: it reduces the taxable rental result but is excluded from the cash-only result.",
-      "Marginal tax rate is approximated at your other taxable income and does not account for this property's result shifting you into a different bracket.",
-      "Does not model capital gains tax, loan principal repayments, land tax, or depreciation recapture on sale.",
+      "Uses the marginal tax rate you selected and does not account for this property's result shifting you into a different bracket.",
+      "Does not model capital gains tax, loan principal repayments, land tax, borrowing-cost amortization, or depreciation recapture on sale.",
       "Pre-advice estimate only - actual deductibility depends on your circumstances; confirm with a registered tax agent.",
     ],
   };

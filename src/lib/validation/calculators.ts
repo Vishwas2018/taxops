@@ -23,3 +23,53 @@ export type ContractorTakeHomeFormInput = z.output<typeof contractorTakeHomeForm
 /** Raw shape react-hook-form manages before validation (day rate etc. arrive as strings from
  * native inputs) - `z.coerce.number()` fields have a different input type than their output. */
 export type ContractorTakeHomeFormRawInput = z.input<typeof contractorTakeHomeFormSchema>;
+
+export const propertyCashFlowFormSchema = z.object({
+  weeklyRent: z.coerce
+    .number({ error: "Enter weekly rent" })
+    .nonnegative("Cannot be negative")
+    .max(10_000, "Enter a realistic weekly rent"),
+  vacancyWeeksPerYear: z.coerce
+    .number({ error: "Enter vacancy weeks" })
+    .min(0, "Cannot be negative")
+    .max(52, "Cannot exceed 52 weeks per year"),
+  annualLoanInterest: z.coerce
+    .number({ error: "Enter annual loan interest" })
+    .nonnegative("Cannot be negative")
+    .max(1_000_000, "Enter a realistic amount"),
+  rates: z.coerce.number({ error: "Enter council/water rates" }).nonnegative("Cannot be negative").max(100_000),
+  insurance: z.coerce.number({ error: "Enter insurance" }).nonnegative("Cannot be negative").max(100_000),
+  management: z.coerce
+    .number({ error: "Enter management fees" })
+    .nonnegative("Cannot be negative")
+    .max(100_000),
+  maintenance: z.coerce
+    .number({ error: "Enter maintenance costs" })
+    .nonnegative("Cannot be negative")
+    .max(100_000),
+  annualDepreciation: z.coerce
+    .number({ error: "Enter annual depreciation" })
+    .nonnegative("Cannot be negative")
+    .max(1_000_000, "Enter a realistic amount"),
+  marginalTaxRate: z.coerce
+    .number({ error: "Select your marginal tax rate" })
+    .min(0, "Must be between 0 and 1")
+    .max(1, "Must be between 0 and 1"),
+});
+
+export type PropertyCashFlowFormInput = z.output<typeof propertyCashFlowFormSchema>;
+export type PropertyCashFlowFormRawInput = z.input<typeof propertyCashFlowFormSchema>;
+
+export const div293FormSchema = z.object({
+  div293Income: z.coerce
+    .number({ error: "Enter your income for Division 293 purposes" })
+    .nonnegative("Cannot be negative")
+    .max(10_000_000, "Enter a realistic amount"),
+  concessionalContributions: z.coerce
+    .number({ error: "Enter concessional contributions" })
+    .nonnegative("Cannot be negative")
+    .max(1_000_000, "Enter a realistic amount"),
+});
+
+export type Div293FormInput = z.output<typeof div293FormSchema>;
+export type Div293FormRawInput = z.input<typeof div293FormSchema>;

@@ -12,7 +12,7 @@ describe("calculatePropertyCashFlow", () => {
         annualExpenses: 0,
         annualLoanInterest: 0,
         annualDepreciation: 0,
-        otherTaxableIncome: 0,
+        marginalTaxRate: 0,
       },
       config,
     );
@@ -22,12 +22,22 @@ describe("calculatePropertyCashFlow", () => {
     expect(result.afterTaxCashFlow).toBe(0);
   });
 
+  it("throws if marginalTaxRate is outside 0-1", () => {
+    const base = {
+      annualRentalIncome: 0,
+      annualExpenses: 0,
+      annualLoanInterest: 0,
+      annualDepreciation: 0,
+    };
+    expect(() => calculatePropertyCashFlow({ ...base, marginalTaxRate: -0.1 }, config)).toThrow();
+    expect(() => calculatePropertyCashFlow({ ...base, marginalTaxRate: 1.1 }, config)).toThrow();
+  });
+
   it("golden file: negatively geared property (loss)", () => {
     // Hand-computed:
     // netRentalResult = $20,000 - $5,000 - $12,000 - $6,000 = -$3,000 (loss)
     // cashOnlyResult = $20,000 - $5,000 - $12,000 = $3,000 (depreciation excluded, non-cash)
-    // marginal rate at $150,000 other income = 37% (135,001-190,000 bracket)
-    // taxEffect = -(-3,000) * 0.37 = $1,110 (tax saving)
+    // taxEffect = -(-3,000) * 0.37 = $1,110 (tax saving, at the 37% bracket rate)
     // afterTaxCashFlow = $3,000 + $1,110 = $4,110
     const result = calculatePropertyCashFlow(
       {
@@ -35,7 +45,7 @@ describe("calculatePropertyCashFlow", () => {
         annualExpenses: 5_000,
         annualLoanInterest: 12_000,
         annualDepreciation: 6_000,
-        otherTaxableIncome: 150_000,
+        marginalTaxRate: 0.37,
       },
       config,
     );
@@ -51,8 +61,7 @@ describe("calculatePropertyCashFlow", () => {
     // Hand-computed:
     // netRentalResult = $30,000 - $5,000 - $8,000 - $4,000 = $13,000 (profit)
     // cashOnlyResult = $30,000 - $5,000 - $8,000 = $17,000
-    // marginal rate at $100,000 other income = 30% (45,001-135,000 bracket)
-    // taxEffect = -(13,000) * 0.30 = -$3,900 (additional tax payable)
+    // taxEffect = -(13,000) * 0.30 = -$3,900 (additional tax payable, at the 30% bracket rate)
     // afterTaxCashFlow = $17,000 - $3,900 = $13,100
     const result = calculatePropertyCashFlow(
       {
@@ -60,7 +69,7 @@ describe("calculatePropertyCashFlow", () => {
         annualExpenses: 5_000,
         annualLoanInterest: 8_000,
         annualDepreciation: 4_000,
-        otherTaxableIncome: 100_000,
+        marginalTaxRate: 0.3,
       },
       config,
     );
@@ -78,7 +87,7 @@ describe("calculatePropertyCashFlow", () => {
         annualExpenses: 0,
         annualLoanInterest: 0,
         annualDepreciation: 0,
-        otherTaxableIncome: 0,
+        marginalTaxRate: 0,
       },
       config,
     );

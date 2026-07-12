@@ -405,6 +405,111 @@ via internal mathematical consistency checks (not a single unverified source tak
   more than a build check - but they don't replace an actual browser session. Day 9's
   Playwright suite is the plan to close this for good.
 
+## Day 5 — Property Cash Flow + Div 293 Calculator Pages (2026-07-12)
+
+Reused the Day 4 pattern exactly (three-generic `useForm` for coerced numbers, enclosing-label
+pattern for radio/checkbox, client component + direct pure-engine import, no persistence,
+non-dismissable calculator-variant `Disclaimer`, `aria-live="polite"` results, financial year
+shown). No `CalculatorPage` factory or other shared abstraction was introduced - three
+calculators now exist and each page is still just a form component + a results component;
+revisit only if a fourth calculator makes the duplication actually painful.
+
+### Engine changes (two deliberate signature changes to already-shipped Day 3 engines)
+
+- **`calculatePropertyCashFlow`**: replaced `otherTaxableIncome` with `marginalTaxRate` as
+  the input. This task wanted the UI to offer a marginal-rate **select populated from config
+  brackets**, not a free-text income field - and there's no single income value that
+  correctly represents an entire bracket, so translating a selected rate back into a fake
+  income would have been backwards. Removed the engine's dependency on `marginalRateAt` in
+  the process (it now just uses the caller-supplied rate directly). Updated
+  `property-cash-flow.test.ts` to pass rates directly - all four existing tests kept the same
+  expected values, since the rates themselves didn't change, only who computes them.
+- **`calculateDiv293`**: renamed `Div293Input.taxableIncome` → `div293Income`, matching this
+  task's explicit instruction to mirror `calculateHelpRepayment`'s `repaymentIncome` pattern.
+  This isn't just a rename: the field's *meaning* changed. Previously the JSDoc documented
+  "combined income does NOT include reportable fringe benefits or net investment losses" as a
+  v1 limitation. Now `div293Income` is documented as a value the **caller** must already
+  compute inclusive of RFB/investment losses (concessional contributions stay a separate
+  field, added by the engine, so they aren't double-counted). Also added `div293Income` to
+  `Div293Result` (echoed back) - needed so the results UI can distinguish "income alone is
+  already over the threshold" (above) from "contributions are what push it over" (straddle)
+  without the caller having to hold onto the original input separately; `IncomeTaxResult`
+  already echoes `taxableIncome` back for the same reason, so this matches an existing
+  pattern rather than inventing a new one.
+- `marginalRateAt` (added Day 3 for the old `otherTaxableIncome` approach) now has no
+  caller in the app - only its own tests exercise it. Kept rather than deleted: it's small,
+  fully tested, and a plausible fit for a future "your marginal rate is X%" display (e.g. the
+  Day 6 tax profile summary). Flagging here rather than quietly leaving it - worth
+  reconsidering for removal if it's still uncalled after Day 7.
+
+### Built
+
+- **`/calculators/property-cash-flow`**: weekly rent + vacancy weeks (default 2) →
+  annualized rent; four separate expense fields (rates/insurance/management/maintenance,
+  no dynamic row builder) summed to `annualExpenses` in the component; loan interest;
+  depreciation (helper text: "from a quantity surveyor's depreciation schedule - not a
+  guess"); marginal rate via a **native `<select>`** populated from
+  `fy2025_26.incomeTaxBrackets.value` (see deviation below). Results: pre-tax cash flow, tax
+  effect, after-tax cash flow, each annual + per week; a plain-language negatively/positively
+  geared explanation; and the CGT/land tax/borrowing-cost-amortization exclusions listed
+  as their own labelled block ("This estimate does not include:"), not buried in the
+  assumptions disclosure.
+- **`/calculators/div-293`**: `div293Income` (helper text explains it's broader than
+  taxable income, and explicitly says not to include concessional contributions there) +
+  concessional contributions. Results render one of three mutually exclusive, explicitly
+  worded states (`below` / `straddle` / `above`) rather than a single generic message - the
+  straddle case (income alone under $250k, but income + contributions over) gets its own
+  paragraph naming both figures and explaining *why* combined income differs from income
+  alone, since that's the case the task flagged as the one users get wrong.
+- **`/calculators`**: replaced the placeholder stub with a 3-card grid (n=3, so no
+  search/filter/category scaffolding was built).
+
+### Deviations
+
+- **Native `<select>` instead of shadcn's `Select` component** for the marginal-rate
+  picker. shadcn's `Select` here is a portal-rendered, pointer-capture-driven `@base-ui/react`
+  component - exactly the kind of thing that's notoriously flaky to drive in jsdom without
+  extra polyfills (`PointerEvent`, `hasPointerCapture`, `scrollIntoView`, etc.), and this task
+  needs real integration tests, not skipped/mocked ones. A native `<select>` still satisfies
+  "select populated from config brackets, not free-text" exactly, works immediately with
+  `register()` and `userEvent.selectOptions`, and needs no portal. Noting this as a deliberate
+  choice, not an oversight - the styled `Select` remains available in
+  `src/components/ui/select.tsx` for anything that isn't test-critical.
+- Property cash flow's "per week" figures divide by a flat 52 (not "weeks let" or a
+  vacancy-adjusted denominator) - it's smoothing the whole year's result over the whole
+  year, matching how "per week" reads on a bank statement, not how many weeks had a tenant.
+
+### Verification
+
+- Full quality loop green: `typecheck && lint && test:coverage && build`. 91 tests total (17
+  new UI tests across property-cash-flow and Div 293), 100% coverage maintained on
+  `src/lib/calculators/`.
+- **The `-0` regression, tested at two levels, not just asserted**: (1)
+  `property-cash-flow-results.test.tsx` feeds the results component a hand-verified
+  exact-zero engine result (`Object.is(data.taxEffect, -0)` asserted `false`) and checks no
+  `-$0` string renders; (2) `property-cash-flow-calculator.test.tsx` drives the **actual
+  form** with numbers chosen so rent exactly equals expenses+interest+depreciation, proving
+  the full form→engine→component pipeline - including the results component's own
+  `annual / 52` arithmetic, a second place `-0` could sneak back in - never reintroduces it.
+- **Negative cash flow correctness**: the property calculator's own default form values
+  happen to produce a real negative pre-tax cash flow (-$2,500/year) and a loss
+  (-$8,500 net rental result) - used as the golden integration-test scenario rather than
+  constructing an artificial one, and cross-checked against hand-computed arithmetic in the
+  test's own comment.
+- **Div 293 straddle state**: tested at both the results-component level (three states,
+  each asserted mutually exclusive via `queryBy`/negative assertions) and via a full
+  form-driven integration test with `div293Income: 230,000` / `concessionalContributions:
+  25,000` (income alone under $250k, combined $255k over it).
+- One test-only false alarm caught and fixed, not a product bug: an initial straddle-state
+  assertion (`/is below/i`) failed because Testing Library's default `getByText` matcher only
+  concatenates an element's *direct* text-node children, not text nested inside a `<strong>`
+  - so "is" and "below" (wrapped in `<strong>`) never appear in the same matched string even
+  though a reader sees them as one continuous phrase. Simplified the assertion rather than
+  restructuring the JSX around a test-tooling quirk.
+- Same stated gap as Days 2/4: no browser/Playwright tool in this environment, so real
+  authenticated click-through wasn't done; RTL integration tests exercise the full
+  component→Zod→engine pipeline in jsdom, which is the strongest verification available here.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off
