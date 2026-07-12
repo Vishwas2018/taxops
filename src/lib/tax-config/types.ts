@@ -23,8 +23,20 @@ export interface TaxYearConfig {
   incomeTaxBrackets: SourcedValue<TaxBracket[]>;
   medicareLevy: {
     rate: SourcedValue<number>;
-    /** Standard (non-senior/pensioner) single-person thresholds only - see assumptions. */
-    lowIncomeThresholds: SourcedValue<{ singleLower: number; singleUpper: number }>;
+    /**
+     * Only `singleLower`/`singleUpper` are wired into `calculateIncomeTax` in v1 - the
+     * family/senior/per-dependant figures are stored for reference (and a future feature)
+     * but are not yet modeled; there is no verified "upper" threshold for those categories
+     * here, only the lower ones the task supplied.
+     */
+    lowIncomeThresholds: SourcedValue<{
+      singleLower: number;
+      singleUpper: number;
+      familyLower: number;
+      seniorSingleLower: number;
+      seniorFamilyLower: number;
+      perDependant: number;
+    }>;
   };
   lito: SourcedValue<{
     maxOffset: number;
@@ -39,5 +51,14 @@ export interface TaxYearConfig {
   division293: {
     incomeThreshold: SourcedValue<number>;
     rate: SourcedValue<number>;
+  };
+  helpRepayment: {
+    /** Equal to `bands[0].min` - kept as its own named value since it's the figure most
+     * worth surfacing directly in the UI ("you're below the repayment threshold"). */
+    minimumRepaymentIncome: SourcedValue<number>;
+    bands: SourcedValue<TaxBracket[]>;
+    /** Above `threshold`, repayment is a flat `rate` of total repayment income instead of
+     * the marginal bands - this is the "cap" the marginal system phases into. */
+    cap: SourcedValue<{ threshold: number; rate: number }>;
   };
 }

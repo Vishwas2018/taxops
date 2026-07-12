@@ -294,6 +294,117 @@ confirming is still the intended v1 boundary.
   $100,000 assessable income) as an internal consistency check.
 - No UI touched this day; stub pages from Day 2 are unchanged.
 
+## Day 3.5 + Day 4 — Config Corrections, then Contractor Take-Home Calculator UI (2026-07-12)
+
+### Part A: config corrections (blocking, done first)
+
+Direct `ato.gov.au` fetches were blocked (HTTP 403, bot detection) on both the Medicare levy
+page and the HELP/STSL repayment-rates page. Verified via web search instead, cross-checking
+independent secondary sources against each other and against this task's own stated figures
+via internal mathematical consistency checks (not a single unverified source taken on faith).
+
+- **Medicare low-income thresholds updated** for the 2026-27 Budget's 2.9% retroactive
+  uplift: single lower $28,011 (was $27,222), single upper **$35,013** (was $34,027), plus
+  family lower $47,238, senior single $44,268, senior family $61,623, per-dependant $4,338
+  now stored for reference (not yet wired into the engine - only single lower/upper are used
+  in v1). **Discrepancy flagged as instructed**: this task's own estimate for the single
+  upper threshold was "~$35,014" via the 10c shade-in formula; the actual gazetted figure
+  found is $35,013 (a $1 difference) - used the sourced figure, not the estimate.
+- **HELP/STSL added to config**, and a real sourcing near-miss caught along the way: an
+  initial search returned $69,528 / $129,717 / $186,050 as "2025-26" figures from a
+  secondary site titled "...for 2026" - a second, more targeted search confirmed those are
+  actually the **indexed FY2026-27** thresholds, not FY2025-26. The correct FY2025-26 figures
+  (minimum $67,000; 15% band to $125,000; 17% band above, uncapped; flat-10% cap crossover at
+  $179,286) cross-checked exactly against this task's own stated cap-point figure via the
+  formula `(179,286 - 125,000) × 0.17 + 8,700 ≈ 179,286 × 0.10`. Had I used the first search's
+  numbers uncritically, every HELP repayment estimate would have been for the wrong year.
+- **`calculateHelpRepayment(repaymentIncome, config)`** added (`help-repayment.ts`), input
+  named `repaymentIncome` per the task's requirement, with JSDoc noting it must already
+  include reportable fringe benefits, net investment losses, reportable super contributions,
+  and exempt foreign income - this engine does not derive it from taxable income. Uses
+  `min(marginalBandAmount, flatCapAmount)`, which elegantly produces the correct "marginal
+  below the cap, flat 10% above it" behaviour with no separate branch - **provided the top
+  band is uncapped (`max: null`)**. It briefly wasn't: an early version capped the 17% band
+  at the $179,286 cap threshold, which froze the marginal amount there instead of letting it
+  keep growing - the golden-file test (`$200,000 -> $20,000`, not the `$17,928.62` the buggy
+  version produced) caught this immediately. Fixed by making the band uncapped and adding a
+  code comment explaining why, so the "obvious-looking" bounded band doesn't get
+  reintroduced later.
+- **Existing golden tests updated for the threshold change**: only one test was actually
+  affected - `income-tax.test.ts`'s $30,000 Medicare shade-in test (all bracket-boundary and
+  other golden tests sit above the new $35,013 upper threshold too, same as the old $34,027
+  one, so their expected values were unchanged). New expected values: Medicare levy $198.90
+  (was $277.80), net tax $1,386.90 (was $1,465.80) - both hand-recomputed in the test's
+  comment.
+- Quality loop green (typecheck/lint/test:coverage/build) before starting Part B, 64 tests,
+  100% coverage maintained.
+
+### Part B: Contractor Take-Home Calculator UI
+
+- **`/calculators/contractor-take-home`** page + `ContractorTakeHomeCalculator` (form,
+  `src/components/calculators/`) + `ContractorTakeHomeResults` (results panel, separate
+  component for testability). Linked from the `/calculators` index stub so it's actually
+  reachable via nav, not orphaned.
+- **Form**: `react-hook-form` + Zod (`src/lib/validation/calculators.ts`,
+  `contractorTakeHomeFormSchema`) - day rate (positive, capped at $50,000 as a sanity bound),
+  billable days/week (positive, max 7), weeks worked/year (positive, max 52, **defaults to
+  46** per this task - note this differs from the engine's own internal default of 48 used
+  when `weeksWorkedPerYear` is omitted entirely; the form always supplies a value explicitly,
+  so the engine default never actually applies here, but it's worth knowing two different
+  "48 vs 46 weeks" defaults now exist in the codebase for different reasons), super
+  inclusive/exclusive radio, optional HELP debt checkbox.
+- **Results panel**: itemized breakdown (gross, super, assessable, gross tax, LITO, Medicare,
+  HELP if toggled, net annual, net per week), financial year prominently labelled,
+  `<Disclaimer variant="calculator" />` rendered directly in the results card (not
+  dismissable - there's no close/dismiss affordance), and a collapsible "assumptions used"
+  list merging both engines' `assumptions` arrays plus one UI-specific note (see below).
+- **HELP composition is a UI-layer decision, not a new engine**: `calculateContractorTakeHome`
+  and `calculateHelpRepayment` stay independent, single-purpose, already-tested Day 3/3.5
+  engines; the calculator component calls both and does one line of arithmetic
+  (`netTakeHome - helpRepayment`) to combine them. HELP's `repaymentIncome` is approximated
+  as the take-home engine's `assessableIncome` (no FBT/investment-loss modeling here) - this
+  approximation is explicitly surfaced as an assumption in the results panel, not hidden.
+- **No persistence**: inputs are local component state only, matching this task's explicit
+  privacy instruction (don't store calculator inputs without a defined user benefit - saved
+  scenarios are a later, deliberate decision).
+- **A real base-ui accessibility gotcha caught before it shipped**: `@base-ui/react`'s
+  `Checkbox.Root` and `Radio.Root` both render as a `<span>` by default specifically to
+  support the *enclosing*-label pattern (`<label><Checkbox />text</label>`); their own docs
+  warn that the alternative sibling `htmlFor`/`id` pattern (what shadcn's separate `<Label>`
+  component does) does **not** reliably associate or toggle these controls. Used the
+  enclosing-label pattern for both the super-treatment radios and the HELP checkbox instead
+  of the `<Label htmlFor>` pattern used elsewhere in the app. Worth remembering for every
+  future radio/checkbox usage in this codebase.
+- **A real RHF+Zod typing conflict, not a workaround**: `z.coerce.number()` fields have a
+  different *input* type (`unknown`, before coercion) than their *output* type (`number`,
+  after), which `useForm<T>`'s single-generic signature can't represent - TypeScript
+  correctly rejected the naive version. Fixed with react-hook-form's three-generic
+  `useForm<RawInput, unknown, ParsedOutput>` signature and two exported schema types
+  (`z.input<>` / `z.output<>`) rather than casting anything to `any`.
+- **New devDependency**: `@testing-library/user-event`, to simulate realistic
+  typing/clicking on the base-ui radio/checkbox controls (plain `fireEvent` doesn't reliably
+  exercise their pointer-event-based interaction model). Installing it also surfaced that
+  `@testing-library/dom` (a peer dependency of `@testing-library/react`) wasn't actually
+  present in `node_modules` despite `--legacy-peer-deps` installs succeeding silently until
+  now - added it explicitly rather than relying on peer resolution.
+
+### Verification
+
+- Full quality loop green: `typecheck && lint && test:coverage && build`. 74 tests total (10
+  new UI tests), 100% coverage maintained on `src/lib/calculators/`.
+- UI tests: `contractor-take-home-results.test.tsx` (disclaimer renders verbatim, financial
+  year shown, `aria-live="polite"` region, HELP line conditionally rendered) and
+  `contractor-take-home-calculator.test.tsx` (three validation-rejection cases with real
+  typed input, one full form→engine→rendered-breakdown integration test reusing the
+  $112,358 golden value from `contractor-take-home.test.ts`, one HELP-toggle integration
+  test) - all using `userEvent` for real typing/clicking, not just `fireEvent`.
+- **Stated gap, as in Day 2**: this environment has no browser/Playwright tool, so an
+  authenticated real-browser click-through of `/calculators/contractor-take-home` (behind
+  `proxy.ts`) wasn't done. The RTL integration tests above do exercise the real component
+  tree, real Zod validation, and real engine computation end-to-end in jsdom - meaningfully
+  more than a build check - but they don't replace an actual browser session. Day 9's
+  Playwright suite is the plan to close this for good.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

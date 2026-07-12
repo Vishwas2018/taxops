@@ -75,11 +75,11 @@ describe("calculateIncomeTax", () => {
   it("phases in the Medicare levy between the low-income thresholds ($30,000)", () => {
     // Hand-computed: grossTax on $30,000 = $1,888.00 (16% of $11,800 over $18,200).
     // LITO = $700 (income <= $37,500 full-offset threshold) -> after-offset tax = $1,188.00.
-    // Medicare shade-in = 10% * ($30,000 - $27,222) = $277.80 (less than the full 2% levy of
-    // $600, so the shaded-in amount applies). Net tax = $1,188.00 + $277.80 = $1,465.80.
+    // Medicare shade-in = 10% * ($30,000 - $28,011) = $198.90 (less than the full 2% levy of
+    // $600, so the shaded-in amount applies). Net tax = $1,188.00 + $198.90 = $1,386.90.
     const result = calculateIncomeTax(30_000, config);
-    expect(result.medicareLevy).toBeCloseTo(277.8, 2);
-    expect(result.netTax).toBeCloseTo(1465.8, 2);
+    expect(result.medicareLevy).toBeCloseTo(198.9, 2);
+    expect(result.netTax).toBeCloseTo(1386.9, 2);
   });
 
   it("golden file: $100,000 taxable income", () => {
