@@ -87,6 +87,24 @@ alter table public.checklist_items enable row level security;
 alter table public.saved_articles enable row level security;
 alter table public.saved_scenarios enable row level security;
 
+-- This Supabase version does not auto-expose new tables to the Data API roles, so grants are
+-- explicit here. `authenticated` gets CRUD (RLS below still restricts to the owner's rows).
+-- `anon` gets nothing on these tables: no v1 feature needs unauthenticated access to user
+-- data, so the row is never reachable rather than reachable-but-filtered. `service_role`
+-- bypasses RLS by default but still needs grants for trusted server-side/admin operations
+-- (seed scripts, maintenance scripts).
+grant select, insert, update, delete on public.profiles to authenticated;
+grant select, insert, update, delete on public.checklists to authenticated;
+grant select, insert, update, delete on public.checklist_items to authenticated;
+grant select, insert, update, delete on public.saved_articles to authenticated;
+grant select, insert, update, delete on public.saved_scenarios to authenticated;
+
+grant all on public.profiles to service_role;
+grant all on public.checklists to service_role;
+grant all on public.checklist_items to service_role;
+grant all on public.saved_articles to service_role;
+grant all on public.saved_scenarios to service_role;
+
 create policy "profiles: owner read" on public.profiles
   for select using (auth.uid () = id);
 create policy "profiles: owner insert" on public.profiles

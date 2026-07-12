@@ -60,21 +60,61 @@
    string since no code yet reads it at build time. Will need a real CI secret (or continue
    with the placeholder) once Day 2 auth code lands — revisit then, not now.
 
-### BLOCKED
+### BLOCKED (resolved Day 2 — see below)
 
-- **Docker Desktop is not running** on this machine, so `supabase start` could not be
-  executed, meaning the migration and seed script above are **written but not yet verified**
-  against a real local Postgres instance. Conservative assumption taken: SQL follows standard
-  Supabase local-dev patterns (including the `auth.users` / `auth.identities` seed insert
-  pattern), but syntax/constraint errors are possible until run.
-  **Action needed from you**: start Docker Desktop, then run `npx supabase start` followed by
-  `npx supabase db reset` (applies migrations + seed) from the `taxops` directory. I'll fix
-  any errors that surface once you confirm Docker is up, or you can paste the output here.
+- ~~Docker Desktop is not running~~ — resolved 2026-07-12: Docker Desktop started, local
+  Supabase stack now runs and the migration/seed are verified. Details under Day 2.
 
-### Next up — Day 2
+## Day 2 — Auth, Layout, Disclaimer (2026-07-12)
 
-Auth (sign up, magic link, sign in/out, protected routes via `proxy.ts`), base layout, nav,
-footer with global disclaimer, `<Disclaimer />` component.
+### Precondition: local Supabase verified
+
+- Started Docker Desktop, then `npx supabase start`. Found and fixed along the way:
+  1. **Port conflict**: this machine already runs another local Supabase project
+     (`mindmosaic-platform`) on the default ports (54321-54327). Moved TaxOps to
+     54331-54339 in `supabase/config.toml` (a documented, standard way to run multiple local
+     Supabase projects side by side). Updated `.env.local.example` and `.github/workflows/ci.yml`
+     to match.
+  2. **Flaky image pulls**: the `studio` and `edge_runtime` container images repeatedly failed
+     mid-pull from CloudFront (transient network path issue, unrelated to this repo) and
+     `edge_runtime` additionally failed on a TLS certificate error reaching `deno.land`
+     (`invalid peer certificate: UnknownIssuer` — looks like a network/proxy TLS-interception
+     issue on this machine). Disabled both in `supabase/config.toml`
+     (`[studio] enabled = false`, `[edge_runtime] enabled = false`). Neither is needed: Studio
+     is only an admin UI, and this project has zero Supabase Edge Functions in v1 scope.
+     Reversible — flip back to `true` if the network issue clears and Studio access is wanted.
+  3. **Real bug found and fixed**: `supabase db reset` applied the Day 1 migration and seed
+     with no SQL errors, but the RLS smoke test (below) then failed with
+     `permission denied for table profiles` for both the anon *and* service-role clients. This
+     Supabase version no longer auto-exposes newly created tables to the Data API roles
+     (`anon`/`authenticated`/`service_role`) without explicit `GRANT`s — the Day 1 migration
+     relied on the old implicit-exposure default, which no longer holds. Fixed by adding
+     explicit grants to the same migration file (not a patch migration, since nothing had
+     consumed the Day 1 migration outside this local, just-created Docker instance):
+     `authenticated` gets full CRUD (RLS still restricts to the owner's rows), `service_role`
+     gets full access for admin/seed/test scripts, and **`anon` gets no grant at all** on any
+     of the five user tables — no v1 feature needs unauthenticated access to user data, so the
+     row is unreachable rather than reachable-but-RLS-filtered (stronger of the two).
+- Confirmed seed rows exist (`profiles`, `checklists` + 6 `checklist_items`, `saved_articles`,
+  `saved_scenarios` all populated for the demo user) via `supabase db reset` output and the RLS
+  script's own queries.
+- **RLS smoke test**: wrote `scripts/smoke-test-rls.mjs` (one-off dev tool, not part of the
+  automated Vitest/CI suite since it needs a live `supabase start` stack — kept in the repo
+  since re-running it after any RLS policy change is cheap and directly serves the
+  constitution's Privacy principle). It creates a throwaway second user via the service-role
+  client, then asserts:
+  - an anon client is rejected outright reading `profiles` (`permission denied`, zero rows)
+  - an authenticated (demo user) client sees exactly its own profile row and cannot read the
+    second user's row either via unfiltered `select` or by direct `id` filter
+  - **Result: all assertions passed.**
+- Local dev now uses ports 54331 (API)/54332 (DB) instead of the Supabase defaults — noted in
+  `README.md`'s "Getting started" implicitly via `.env.local.example`; explicit callout added
+  here for anyone who copies commands from Supabase's own docs (which assume 54321/54322).
+
+### Next up
+
+Auth flows, layout split (public/authenticated shells), `proxy.ts` route protection,
+`<Disclaimer />` component — see below once built.
 
 ## Human gates (for reference)
 

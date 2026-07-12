@@ -11,7 +11,7 @@ jobs:
     env:
       # Public Supabase env vars used by the browser/server client factories.
       # Point at the local Supabase CLI defaults; no real project is used in CI.
-      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54321
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54331
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.CI_SUPABASE_ANON_KEY || 'ci-placeholder-anon-key' }}
     steps:
       - uses: actions/checkout@v4
