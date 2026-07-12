@@ -111,10 +111,88 @@
   `README.md`'s "Getting started" implicitly via `.env.local.example`; explicit callout added
   here for anyone who copies commands from Supabase's own docs (which assume 54321/54322).
 
-### Next up
+### Built
 
-Auth flows, layout split (public/authenticated shells), `proxy.ts` route protection,
-`<Disclaimer />` component — see below once built.
+- **Supabase client factories**: `src/lib/supabase/client.ts` (browser), `server.ts` (Server
+  Components/Actions/Route Handlers via `next/headers` cookies), `middleware.ts`
+  (`updateSession` helper used by `proxy.ts`) — standard `@supabase/ssr` `getAll`/`setAll`
+  cookie pattern (the deprecated `get`/`set`/`remove` API is not used).
+- **Zod schemas** (`src/lib/validation/auth.ts`): `signUpSchema`, `signInSchema`,
+  `requestPasswordResetSchema`, `updatePasswordSchema`. Password minimum set to 8 (Supabase's
+  own default is 6) as a slightly stronger baseline without a full strength meter. Tests in
+  `auth.test.ts` cover valid input, invalid email, short password, and mismatched-password
+  cases for every schema.
+- **Server actions** (`src/app/(auth)/actions.ts`): `signUpAction`, `signInAction`,
+  `signOutAction`, `requestPasswordResetAction`, `updatePasswordAction`. Every action
+  re-validates with the same Zod schema server-side even though the form already validated
+  client-side (constitution's Privacy rule). Returns `{ status: "error" | "info", message }`
+  on failure/info, redirects on success.
+- **`proxy.ts`** (Next 16's renamed `middleware.ts`): fail-closed matcher — everything except
+  static assets is protected by default; `PUBLIC_PATHS` allowlists `/`, the auth pages, `/tips/*`,
+  and `/auth/*` (the PKCE callback). Optimistic redirect only, per Next's own Proxy docs; the
+  `(app)` layout independently re-verifies via `getUser()` (not `getSession()`, which is
+  unverified) before rendering anything private. Tests in `proxy.test.ts` mock `updateSession`
+  and cover: protected+unauthenticated → redirect with `redirectTo`, every public path +
+  unauthenticated → pass-through, protected+authenticated → pass-through.
+- **`/auth/confirm` PKCE callback** (`src/app/auth/confirm/route.ts`): not explicitly named in
+  the brief ("password-reset **request** flow" only), but necessary plumbing — without it,
+  the emailed reset/confirmation link has nowhere to exchange its `code` for a session under
+  `@supabase/ssr`'s cookie-based model. Exchanges the code, then redirects to `next` (defaults
+  to `/dashboard`; the reset flow passes `next=/update-password`). Also added the
+  `update-password` page itself for the same reason — a request-only flow with no completion
+  page would be non-functional. Logged here as a deliberate scope completion, not creep.
+- **`<Disclaimer />`** (`src/components/disclaimer.tsx` + `src/lib/disclaimers/index.ts`):
+  `variant: "inline" | "footer" | "calculator"` only, no free-text prop, wording lives in one
+  constant. Rendered in both the authenticated `(app)` layout footer and the public
+  `(marketing)` layout footer (the very first brief message asked for a *global* footer
+  disclaimer; this Day 2 message scoped the requirement to the authenticated shell alone, but
+  narrowing to only one of the two footers would contradict the earlier instruction, so both
+  keep it). Tests in `disclaimer.test.tsx` check exact wording renders for all three variants.
+- **Layout shells**: `(marketing)` (public header/nav + footer, home page, `/tips` stub),
+  `(auth)` (centered card, no nav), `(app)` (sidebar nav — Dashboard/Tax Profile/
+  Calculators/Checklists/Tips — + user-menu dropdown with sign-out + footer). Stub pages for
+  `dashboard`, `profile`, `calculators`, `checklists` so the protected routes and nav have
+  somewhere real to point during this and later verification; each just states what lands
+  there on its scheduled day.
+- **Form wiring without shadcn's `form.tsx`**: `src/components/ui/form-field.tsx`, a small
+  accessible label/control/error/description wrapper for `react-hook-form` `register()`
+  fields (labels, `aria-invalid`, `aria-describedby`, visible error text) — built now since
+  it'll be reused by every future form (calculators, tax-profile interview), not just these
+  four.
+- **shadcn/`@base-ui/react` API surface note**: this shadcn version is built on `@base-ui/react`,
+  not Radix, and it does **not** support Radix's `asChild` pattern at all — `Button` has no
+  `asChild` prop, and base-ui's own docs explicitly say links should never go through a
+  component's `render` prop (style the `<Link>` directly instead). Fixed every "button that's
+  actually a link" spot (marketing header/hero, user-menu trigger) to apply
+  `buttonVariants({...})` as a plain `className` on the `Link`/`DropdownMenuTrigger` instead of
+  wrapping a nested `<Button>`. Worth remembering for every later shadcn button+link usage.
+- Added shadcn `dropdown-menu` and `avatar` components (needed for the user menu).
+
+### Verification
+
+- Full quality loop green: `typecheck && lint && test && build`. 25 tests across 4 files
+  (round, auth schemas, Disclaimer, proxy).
+- **Live dev-server check** (not just unit tests): started `npm run dev` (auto-picked port
+  3001 — 3000 was already held by another local process) and hit it with `curl`:
+  - `GET /dashboard` unauthenticated → `307` to `/sign-in?redirectTo=%2Fdashboard` ✓
+  - `GET /` and `GET /tips` unauthenticated → `200` ✓ (public despite proxy's fail-closed default)
+  - `GET /auth/confirm` with no `code` → `307` to `/sign-in?error=auth-confirm-failed` ✓
+  - `/sign-in` HTML contains the sign-in form; `/` footer contains the exact disclaimer text ✓
+  - The RLS smoke test (see precondition above) already separately proved
+    `supabase.auth.signInWithPassword` against the demo user works end-to-end at the Supabase
+    level.
+  - **Gap, stated plainly**: actually driving the React form → Server Action → redirect →
+    session-cookie loop through a real browser was not done here — there's no browser/Playwright
+    tool available in this environment. Everything that *can* be verified without one (proxy
+    logic, route protection, page content, real Supabase auth calls) was verified directly
+    rather than assumed. The click-through gap is exactly what Day 9's Playwright critical-path
+    suite (sign-up → profile → calculator → save scenario) is scheduled to close — flagging it
+    now rather than glossing over it.
+
+### Next up — Day 3
+
+FY2025-26 tax config + income tax / Medicare / Div 293 / super engines with exhaustive
+boundary tests, then **⛔ Human Gate 1**.
 
 ## Human gates (for reference)
 
