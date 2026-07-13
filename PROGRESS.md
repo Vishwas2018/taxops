@@ -1142,6 +1142,174 @@ resolution against Tailwind's compiled output the way a real browser does.
 - Every finding above was verified fixed by re-running the specific spec that caught it, then the
   full suite once more end-to-end.
 
+## Day 10 — Deployment Prep: Vercel + Hosted Supabase (2026-07-13)
+
+Scope: one staging environment, not a launch. Full steps in the new `docs/deployment.md`; this
+entry covers what happened running them, what reality corrected, and what's still open.
+
+### Carry-over from Day 9
+
+- **`docs/design.md`'s stale token note fixed**: it still documented the *broken*
+  `rgb(var(--accent) / <alpha-value>)` pattern as if it were correct, after Day 9 had already
+  fixed the actual CSS to drop the placeholder. Updated the doc to match reality and added a
+  "Tailwind v3→v4 divergence" callout so the mistake isn't repeated when porting other pieces of
+  `design-theme-source.md`.
+- **Screenshot review caught one artifact bug**: `e2e/screenshots/05-profile-wizard-step.png`
+  was actually the tax-profile **summary** view, not the wizard step its filename promised - the
+  screenshot spec didn't reset the shared E2E user's profile first, so whatever a previous spec
+  in the same run left behind (an answered profile) made `/profile` render the summary/edit view
+  instead. Fixed `e2e/visual/screenshots.spec.ts` to reset via `resetE2EUserData` first, same
+  pattern as the wizard specs; re-ran the full suite (26/26 still green) and confirmed the
+  regenerated screenshot actually shows step 1.
+
+### GitHub repo (new prerequisite, not in the original Day 9 plan)
+
+No git remote existed anywhere in this project before today - Day 9's CI workflow file had never
+actually run. Created `https://github.com/Vishwas2018/taxops` (public, per instruction) and
+pushed `main`. This is what made "verify the Day 9 e2e job actually runs on GitHub Actions" a
+real, checkable thing today rather than a hypothetical.
+
+### CI: two real bugs found on the very first Actions run, both fixed
+
+1. **Missing anon key.** The `e2e` job's env block only set `NEXT_PUBLIC_SUPABASE_URL` and
+   `SUPABASE_SERVICE_ROLE_KEY` - `NEXT_PUBLIC_SUPABASE_ANON_KEY` was never wired in, so `proxy.ts`
+   errored on every request (`requireEnv` throws). Added the local Supabase CLI's well-known
+   fixed dev anon key directly in the workflow (not a secret - it's derived from the default
+   local JWT secret every `supabase init` project starts with, same value `supabase status`
+   prints on any machine).
+2. **A genuinely flaky test, only on CI's shared runners.** `e2e/journeys/checklists.spec.ts`'s
+   toggle-then-reload test failed intermittently (flipped between expecting `true`/`false` across
+   retries) - the checkbox toggles optimistically client-side, then persists via a Server Action
+   fired in the background; the test reloaded before that background write necessarily landed.
+   Never reproduced locally (fast enough machine), reliable on GitHub's shared runners. Fixed by
+   waiting for the actual POST round-trip (`page.waitForResponse`) before reloading, not just the
+   optimistic DOM update.
+3. Set the `CI_SUPABASE_SERVICE_ROLE_KEY` repository secret (same well-known local-dev value,
+   see `docs/deployment.md` §8 for why this one is fine to store even though it's not sensitive).
+
+**Result: both `quality` and `e2e` jobs green** at
+`https://github.com/Vishwas2018/taxops/actions` - the first ever green CI run for this repo.
+
+### Supabase staging: linked, migrated, RLS-verified
+
+- `supabase link --project-ref wynknhwynlygfoytfywc` (project ref supplied by the human, created
+  via the dashboard per `docs/deployment.md` §1 - project creation itself was not done by the
+  agent).
+- `supabase db push`: all three migrations (`20260712000000_init_schema.sql`,
+  `20260713010000_tax_profile_interview.sql`, `20260713020000_eofy_checklists.sql`) applied
+  cleanly, no errors.
+- **Verification method changed from the plan**: `supabase db diff --linked` needs a local Docker
+  shadow database, which hit the exact same flaky CloudFront image-pull issue Day 2 already
+  documented for `studio`/`edge_runtime` - not a new problem, the same known environment quirk
+  showing up in a new command. Used `supabase migration list --linked` instead (compares the
+  remote applied-migrations table against local filenames, no Docker needed) - all three matched,
+  no drift. `docs/deployment.md` §3 updated to recommend this method going forward.
+- `scripts/smoke-test-rls.mjs` (Day 10's staging-safety refactor - see below) run against
+  staging: **19/20 assertions passed.**
+
+### Real finding: hosted Supabase grants `anon` far more than the migration intended
+
+The one smoke-test failure: anon's `select` against `profiles` returned zero rows with **no
+error**, where local returns a hard "permission denied." Investigated with
+`supabase db query --linked` (read-only SQL against the linked project, no dashboard needed):
+
+- `information_schema.role_table_grants` showed `anon` holding full
+  `SELECT/INSERT/UPDATE/DELETE/...` on **all five** `public` tables, not the "anon gets nothing"
+  state the Day 2 migration explicitly intended (and that holds true locally).
+- `pg_default_acl` showed why: the hosted project has schema-level
+  `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO anon, authenticated, service_role` set for
+  both the `postgres` and `supabase_admin` roles in `public` - a **platform bootstrap default
+  the local CLI's Docker image doesn't replicate**. Every `CREATE TABLE` in every migration
+  silently inherits this, regardless of what the migration itself grants. Day 2's own note ("this
+  Supabase version no longer auto-exposes new tables... without explicit GRANTs") turns out to
+  describe *local* behavior only - the hosted platform never stopped auto-exposing.
+- **Not a data exposure**: confirmed RLS is enabled on all five tables
+  (`pg_class.relrowsecurity = true`, checked directly) and every authenticated-access assertion
+  passed correctly (cross-user isolation, partial-upsert scoping). `anon` can issue the SQL, but
+  has no `auth.uid()`, so RLS filters every row - same practical outcome (zero rows) as the local
+  hard rejection, just a different mechanism.
+- **Per this task's explicit instruction ("any drift... stop and report before improvising"),
+  no fix was pushed.** Proposed migration (revoke the unintended grant + the default-privilege
+  rule that would re-grant it to every future table) is written up in `docs/deployment.md` §4,
+  awaiting sign-off - it's a grants-hardening change against a real hosted database with real
+  auth users, not something to push unilaterally.
+
+### `scripts/smoke-test-rls.mjs` made staging-safe
+
+The script previously assumed `supabase/seed.sql` had already created `demo@taxops.local` with a
+fixed id. Seed files never run against a hosted project (`db push` doesn't execute them, and
+`seed.sql` is explicitly commented "local dev only, never run against a production project") -
+running the script against staging as-is would have failed at the first sign-in. Changed it to
+look up (or create, via the service-role admin API) the demo user and use whatever id it actually
+gets, rather than a hardcoded `11111111-...`. Also pre-seeds the one `checklist_item_states` row
+section 4's "untouched row" comparison needs. Verified this is a strict refactor, not a behavior
+change: re-ran locally after the change, still 20/20 (staging's 19/20 is the grants finding
+above, unrelated to this refactor).
+
+**Cleanup confirmed**: `admin.auth.admin.listUsers()` against staging after the run shows exactly
+one user, `demo@taxops.local` - the throwaway `rls-smoke-<timestamp>@taxops.local` second user
+was properly deleted by the script's own `finally` block. No orphaned test users left behind.
+
+### Hosted auth config: partially verifiable without dashboard access
+
+Supabase's public `/auth/v1/settings` endpoint (readable with just the anon key, no dashboard
+login needed) confirmed `"mailer_autoconfirm": false` - **email confirmation is ON**, matching
+`docs/deployment.md` §5's requirement. Site URL and the redirect allowlist aren't exposed by that
+endpoint (by design - GoTrue doesn't leak the full redirect allowlist to anonymous callers), and
+no CLI/Management API read path was available in this environment either. Flagged in
+`docs/deployment.md` §5 as needing the human's own dashboard confirmation once the Vercel URL
+question below is settled - not assumed correct.
+
+### Blocker, unresolved: Vercel Deployment Protection
+
+Every URL tried for the connected Vercel project -
+`taxops-zq0cyhorm-vishwas2018s-projects.vercel.app` (the one shared),
+`taxops-vishwas2018s-projects.vercel.app` (hashless alias), `taxops.vercel.app` (404s, unclaimed)
+- redirected with a `302` to `vercel.com/sso-api?...`. That's **Vercel's own Deployment
+Protection / Vercel Authentication SSO gate**, not this app's `proxy.ts` - every curl hit
+Vercel's edge network, never reached Next.js at all. This blocks every remaining check this task
+asked for:
+
+- Build success / `proxy.ts` route-protection verification on the deployed URL
+- Env-leakage check on the deployed bundle
+- The human's §9 browser smoke test (signup/confirm/wizard/calculator/checklist)
+
+Per the same "stop and report" instruction as the grants finding, **did not attempt to work
+around this** (no bypass token exists yet, and guessing at Deployment Protection settings on a
+real Vercel project isn't this agent's call). Three options written up in `docs/deployment.md`
+§6 for the human to choose from: turn protection off (simplest, reasonable for a disposable
+staging project with no real user data yet), generate a Protection Bypass for Automation secret
+for future automated checks, or confirm Production specifically is already unprotected and share
+that URL if it differs from what's above.
+
+### Deviations
+
+- **GitHub repo creation wasn't in the original Day 9/10 plan** - added because CI verification
+  and Vercel's Git integration both need one to exist. Confirmed with the human first (public,
+  named `taxops`) rather than assumed.
+- **`db diff --linked` replaced with `migration list --linked`** in the documented verification
+  method, for the Docker/CloudFront reason above - a tooling substitution, not a scope reduction;
+  both answer "did every migration apply."
+- **The anon-grants finding and the Vercel Deployment Protection blocker are both reported, not
+  fixed** - both are explicit "stop and report" cases per this task's own instructions, and both
+  touch configuration on real hosted infrastructure that isn't this agent's to change
+  unilaterally.
+
+### Verification
+
+- `npx supabase migration list --linked`: all three migrations match, no drift.
+- `scripts/smoke-test-rls.mjs` against staging: 19/20 (the 20th is the reported grants finding,
+  not a script bug - re-verified the script itself is correct by re-running it locally, still
+  20/20 there).
+- `admin.auth.admin.listUsers()` against staging: exactly one user (`demo@taxops.local`), no
+  orphaned throwaway users.
+- GitHub Actions: both `quality` and `e2e` jobs green at
+  `https://github.com/Vishwas2018/taxops/actions`.
+- **Not verified, blocked**: Vercel build success, `proxy.ts` behavior on the deployed edge
+  network, env-leakage check on the deployed bundle, and the human's §9 staging smoke test - all
+  four need the Deployment Protection question resolved first. Stated plainly rather than
+  assumed passing.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

@@ -24,12 +24,12 @@ run by the agent.
 6. Plan: **Free**.
 7. Create, wait for provisioning (~2 minutes).
 8. From the project's **Settings → API** page, note down (you'll paste these into Vercel later,
-   §5):
+   §6):
    - **Project URL** (`https://<ref>.supabase.co`)
    - **anon / publishable key**
-   - **service-role key** — copy it somewhere private for the RLS smoke test (§3) and never
+   - **service-role key** — copy it somewhere private for the RLS smoke test (§4) and never
      put it in a client-side env var or commit it anywhere. It is not needed by the deployed
-     app itself (see §5's env var table — the app only ever uses the anon key).
+     app itself (see §6's env var table — the app only ever uses the anon key).
 9. Note the **project ref** (the `<ref>` in the URL / the string after `db.` in the database
    host) — needed for `supabase link` below.
 
@@ -66,14 +66,26 @@ npx supabase db push
 
 This applies, in order: `20260712000000_init_schema.sql`, `20260713010000_tax_profile_interview.sql`,
 `20260713020000_eofy_checklists.sql` — the full current schema (`profiles`, `checklist_item_states`,
-`checklist_custom_items`, `saved_articles`, `saved_scenarios`, all RLS-enabled). Confirm via the
-dashboard's **Table Editor** or `npx supabase db diff --linked` (should report no pending changes
-afterward).
+`checklist_custom_items`, `saved_articles`, `saved_scenarios`, all RLS-enabled).
+
+**Confirm with `supabase migration list --linked`**, not `supabase db diff --linked` — `db diff`
+needs to spin up a local Docker shadow database to compare against, which hits the same flaky
+CloudFront image-pull issue Day 2's PROGRESS.md already documented for `studio`/`edge_runtime`.
+`migration list --linked` does the same "did everything apply" check (compares local migration
+filenames against the remote project's applied-migrations table) without needing Docker at all:
+
+```bash
+npx supabase migration list --linked
+```
+
+Expect the `Local` and `Remote` columns to match exactly, one row per migration file, both showing
+the same timestamp-prefixed IDs. Verified 2026-07-13 against `taxops-staging`: all three matched
+with no drift.
 
 **No seed data goes to staging.** `supabase/seed.sql` is explicitly commented "local dev seed
 data only, never run against a production project" and `db push` doesn't run it regardless — the
 staging project starts with an empty schema. The RLS smoke script (§4) and the human smoke test
-(§8) both create their own users through the app/API rather than depending on seeded rows.
+(§9) both create their own users through the app/API rather than depending on seeded rows.
 
 ## 4. Verify RLS on staging
 
@@ -94,6 +106,45 @@ isolation, on both `profiles` and the Day 8 checklist tables) should pass identi
 local run. **The service-role key only ever lives in your local shell environment for this one
 command** — it is never written to a file in this repo, never set as a Vercel env var, and never
 shipped to the browser.
+
+**Real finding, reported not fixed (2026-07-13)**: against `taxops-staging`, 19/20 assertions
+passed — the one failure was "anon select was rejected (permission denied)", which instead
+returned zero rows with **no error**. Investigated with `supabase db query --linked` (read-only,
+no dashboard needed):
+
+```sql
+select grantee, table_name, privilege_type from information_schema.role_table_grants
+where table_schema='public' and grantee='anon';
+```
+
+confirmed `anon` holds full `SELECT/INSERT/UPDATE/DELETE/...` grants on **all five** `public`
+tables on the hosted project - not the "`anon` gets nothing" state Day 2's migration explicitly
+intended and that holds true locally. Root cause, confirmed via `pg_default_acl`: the hosted
+project has schema-level `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO anon,
+authenticated, service_role` set for both the `postgres` and `supabase_admin` roles in the
+`public` schema - a platform bootstrap default the local CLI's Docker image doesn't replicate
+(consistent with Day 2's own note that "this Supabase version no longer auto-exposes new
+tables... without explicit GRANTs," which turns out to describe *local* behavior only). Every
+`CREATE TABLE` in every migration silently inherits this default, regardless of what the
+migration itself explicitly grants.
+
+**Not a data exposure** - confirmed RLS is enabled on all five tables
+(`pg_class.relrowsecurity = true`, checked directly) and every authenticated-access assertion in
+the smoke test passed correctly (cross-user isolation, partial-upsert scoping, etc.). `anon` can
+issue the SQL, but has no `auth.uid()`, so RLS policies filter every row - the practical result
+is identical to a hard rejection (zero rows either way), just via a different mechanism than
+intended. Still worth fixing for defense-in-depth (a future table added without RLS enabled
+would have zero protection instead of one layer), but it's a grants-hardening migration against
+a real hosted database with real auth users - **not pushed without sign-off**. Proposed fix,
+for review before applying:
+
+```sql
+revoke all on all tables in schema public from anon;
+alter default privileges in schema public revoke all on tables from anon;
+```
+
+(`authenticated`/`service_role` keep their default-privilege grants - both already have
+equivalent or broader explicit grants by design, so this only removes the *unintended* one.)
 
 ## 5. Auth config for hosted (staging behaves like production)
 
@@ -132,6 +183,14 @@ email sent from staging would link back to `localhost` instead of the real stagi
 a real, easy-to-miss deploy footgun: **the env var and the Supabase redirect allowlist both need
 to agree on the deployed domain, or the confirm link either 404s or gets rejected by Supabase's
 own redirect check.**
+
+**Verified 2026-07-13, partial**: Site URL and the redirect allowlist aren't readable from
+outside the dashboard — there's no CLI command or Management API call available in this
+environment that returns them, and Supabase's public `/auth/v1/settings` endpoint (which *is*
+readable with just the anon key, no dashboard access needed) doesn't include either. What that
+endpoint does confirm: `"mailer_autoconfirm": false` — email confirmation **is** ON, matching
+this section's requirement. Site URL and the redirect allowlist still need your own dashboard
+confirmation against the values above once the Vercel URL (§6) is settled.
 
 ## 6. Vercel project
 
@@ -188,6 +247,30 @@ won't come back correctly — expected for one-off previews, not a bug.
    the three `NEXT_PUBLIC_*` vars above. Anything without that prefix is server-only by Next.js
    convention and won't reach the browser bundle regardless, but there shouldn't be anything
    else here to leak in the first place per this project's minimal env surface.
+
+**Blocker found 2026-07-13, unresolved**: every URL tried for this project
+(`taxops-<hash>-vishwas2018s-projects.vercel.app` and the hashless
+`taxops-vishwas2018s-projects.vercel.app` alias; `taxops.vercel.app` 404s, unclaimed) redirects
+with `302` to `vercel.com/sso-api?...` — **Vercel's own Deployment Protection / Vercel
+Authentication SSO gate**, not this app's `proxy.ts`. That's a platform-level setting
+(**Settings → Deployment Protection** in the Vercel dashboard), on by default for
+Preview deployments on most plans and possible to extend to Production too. Nothing in this
+doc's step 4/5 checks (build log, `/dashboard` redirect behavior, env var leakage) could be
+performed against a URL that never reaches the app at all — every curl hit Vercel's edge, not
+Next.js. **Needs one of, from the dashboard** (stopping here rather than guessing which you'd
+prefer):
+- Turn Deployment Protection off for this project (simplest, fine for a disposable staging
+  project with no sensitive data), or
+- If keeping it on: generate a **Protection Bypass for Automation** secret (Settings →
+  Deployment Protection) and share *that it's set*, not its value — it can be passed as an
+  `x-vercel-protection-bypass` header or `?x-vercel-set-bypass-cookie=...` query param for
+  future automated checks, or
+- Confirm whether Production specifically has protection disabled and share the intended
+  stable production URL if it differs from what's above.
+
+Until this is resolved, this section's own build-success/`proxy.ts`/env-leakage checks (steps
+4-5 above) and §9's human smoke test are both blocked — not skipped, blocked, and flagged rather
+than worked around.
 
 ## 7. Migration discipline going forward (starts now, permanently)
 
