@@ -41,7 +41,7 @@ export function ContractorTakeHomeResults({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm tabular-nums">
           <dt className="text-muted-foreground">Gross income</dt>
           <dd className="text-right font-medium">{formatCurrency(takeHome.grossIncome)}</dd>
 
@@ -72,7 +72,7 @@ export function ContractorTakeHomeResults({
 
         <Separator />
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 tabular-nums">
           <dt className="font-semibold">Net take-home (annual)</dt>
           <dd className="text-right font-semibold">{formatCurrency(finalNetAnnual)}</dd>
 

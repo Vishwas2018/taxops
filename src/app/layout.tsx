@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Inter } from "next/font/google";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// next/font/google downloads and self-hosts the font files at build time (no
+// runtime request to Google), so this satisfies the design system's
+// self-hosted/preload requirement without adding a font-binary asset to the
+// repo - see docs/design.md Divergences.
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "optional",
 });
 
 const geistMono = Geist_Mono({
@@ -27,7 +32,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         {children}

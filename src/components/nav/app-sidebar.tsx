@@ -25,11 +25,10 @@ export function AppSidebar() {
             href={item.href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+              "rounded-md px-3 py-2 text-sm font-medium transition-colors duration-200 ease-in-out",
               isActive
-                ? "bg-secondary text-secondary-foreground"
-                : "text-muted-foreground hover:bg-secondary/50 hover:text-foreground",
+                ? "bg-accentSubtle text-accentOnSurface"
+                : "text-textMuted hover:bg-neutralSubtle hover:text-textPrimary",
             )}
           >
             {item.label}

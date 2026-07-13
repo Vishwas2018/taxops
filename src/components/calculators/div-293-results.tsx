@@ -28,7 +28,7 @@ export function Div293Results({ data }: { data: Div293Result }) {
         <CardTitle>Estimated results — FY{data.financialYear}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm tabular-nums">
           <dt className="text-muted-foreground">Income for Division 293 purposes</dt>
           <dd className="text-right font-medium">{formatCurrency(data.div293Income)}</dd>
 
@@ -49,20 +49,20 @@ export function Div293Results({ data }: { data: Div293Result }) {
 
         <Separator />
 
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 tabular-nums">
           <dt className="font-semibold">Division 293 tax payable</dt>
           <dd className="text-right font-semibold">{formatCurrency(data.additionalTax)}</dd>
         </dl>
 
         {state === "below" && (
-          <p className="text-sm" data-state="below">
+          <p className="text-sm tabular-nums" data-state="below">
             Your combined income ({formatCurrency(data.combinedIncome)}) is at or below the{" "}
             {formatCurrency(data.threshold)} threshold, so no Division 293 tax applies.
           </p>
         )}
 
         {state === "straddle" && (
-          <p className="text-sm" data-state="straddle">
+          <p className="text-sm tabular-nums" data-state="straddle">
             Your income alone ({formatCurrency(data.div293Income)}) is <strong>below</strong>{" "}
             the {formatCurrency(data.threshold)} threshold - but adding your concessional
             contributions brings your <strong>combined</strong> income to{" "}
@@ -74,7 +74,7 @@ export function Div293Results({ data }: { data: Div293Result }) {
         )}
 
         {state === "above" && (
-          <p className="text-sm" data-state="above">
+          <p className="text-sm tabular-nums" data-state="above">
             Your income alone ({formatCurrency(data.div293Income)}) already exceeds the{" "}
             {formatCurrency(data.threshold)} threshold, so Division 293 tax applies regardless
             of your concessional contributions.

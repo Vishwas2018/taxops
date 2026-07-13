@@ -632,6 +632,116 @@ dependencies, justified per the Simplicity First rule rather than reaching for a
   browser; the RTL tests render the actual page/layout component tree and the build output was
   inspected directly, which is the strongest verification available here.
 
+## Day 6.5 — Design Alignment with FamilyFlux Theme (2026-07-13)
+
+### What this was
+
+An external design reference (`DESIGN-THEME.md`, a portable design-token doc extracted from a
+different product called FamilyFlux) was adopted as TaxOps' design system. Token architecture
+and light palette only — see Divergences below for what was deliberately not carried over.
+Full non-negotiables, token tables, and rationale now live in `docs/design.md`; the source doc
+is preserved verbatim at `docs/design-theme-source.md` for provenance.
+
+### Built
+
+- **Token architecture** (`src/app/globals.css`): replaced the shadcn OKLCH default palette with
+  RGB-channel CSS custom properties (`--accent: 79 70 229`) wired through Tailwind v4's `@theme`
+  as `rgb(var(--x) / <alpha-value>)`, so opacity modifiers work (`bg-accent/60`). Every existing
+  shadcn slot name (`primary`, `secondary`, `muted`, `accent`, `destructive`, `card`, `popover`,
+  `border`, `input`, `ring`, `sidebar-*`) is aliased onto the same channel vars as the new
+  FamilyFlux-named tokens (`bg`, `surface`, `textPrimary`, `accentSubtle`, `dangerFg`, etc). The
+  Day 6 audit (this task's own recon pass) found **zero hardcoded colors anywhere in `src/`
+  outside `globals.css` already** - every component was already semantic-class-only - so the
+  re-skin propagated automatically to every primitive (input, dialog, dropdown, select, tabs,
+  table, checkbox, radio-group, avatar, separator, skeleton, sonner, form-field, label) with no
+  per-component edits needed beyond the three below.
+- **`@custom-variant dark`** retargeted from `.dark` (shadcn default) to `[data-theme="dark"]`
+  (the FamilyFlux architecture) but **no dark token values were added and nothing sets
+  `data-theme`** - dark mode is wired-but-inert, cheap to finish later, not shipped now.
+- **Button, Card, Badge** (`src/components/ui/{button,card,badge}.tsx`) rewritten to the source
+  doc's literal component patterns (existing `variant` prop values kept so no call site broke):
+  Button's `default`/`secondary`/`outline`/`ghost`/`destructive`/`link` remapped to
+  primary/bordered-neutral/ghost/danger/link per spec; Card gained `variant="elevated"`
+  (`shadow-raised`) and `variant="interactive"` (hover lift + `tabIndex=0`) on top of the base
+  `rounded-lg border border-border bg-surface` pattern; Badge became the spec's Pill
+  (`rounded-full`, subtle-bg/OnSurface-text pairs).
+- **Global focus ring**: `*:focus-visible { outline: 2px solid accentOnSurface; outline-offset:
+  2px; }` in `globals.css`, replacing per-component `ring-*` focus classes on Button/Badge/
+  `app-sidebar.tsx`. Base UI internals that deliberately suppress the outline for their own
+  bg-highlight focus treatment (dialog content, dropdown/select items) were left alone - that's
+  an established listbox/menu pattern, not something this task's focus-ring rule was written to
+  override.
+- **Typography**: switched `next/font/google` from `Geist` to `Inter` (`display: "optional"`),
+  and fixed a latent bug found during recon - the inherited shadcn theme had `--font-sans: var(--font-sans)`,
+  a circular self-reference that meant the `font-sans` utility was silently falling back to
+  Tailwind's default stack and the loaded font was never actually applied. Now
+  `--font-sans: var(--font-inter)`. `tabular-nums` added to every money-figure `<dl>`/`<p>`
+  across the three calculator results components (`contractor-take-home-results.tsx`,
+  `div-293-results.tsx`, `property-cash-flow-results.tsx`).
+- **`<Disclaimer />`** (`src/components/disclaimer.tsx`): was plain muted text
+  (`text-muted-foreground`, 4.59:1 - borderline for its own use as body copy), which the task's
+  guardrail called out as not-necessarily-prominent-post-reskin. Rewritten as a bordered/tinted
+  box (`bg-neutralSubtle`, `footer` variant additionally `border border-border`) with a
+  `lucide-react` `Info` icon, so prominence comes from shape + icon + text, not color alone
+  (CLAUDE.md's colour-never-sole-signifier rule). Wording, the fixed-prop API (no free-text
+  override), and the exact text node the existing test suite matches on (`getByText(STANDARD_DISCLAIMER)`)
+  were all preserved untouched.
+- **`docs/design.md`**: the five non-negotiable rules verbatim, the light token table with
+  contrast notes, the dark token table under "specified, not implemented", component-pattern
+  mapping, and the Divergences section (below, condensed).
+
+### Deviations / Divergences from the source doc
+
+- **Dark mode deferred** (architecture-ready, zero token values, no toggle) - v1 has no
+  requirement for it, and shipping it means re-testing every surface pair plus the glass/glow
+  system, which is real scope with no near-term payoff. Glass/glow deferred with it (dark-only
+  in the source, no light-mode equivalent worth building alone).
+- **`secondary` (orange-700) reassigned.** Source role was "growth metrics, near-limit
+  warnings" - directly overlapping TaxOps' existing `warning` (amber) semantic. Reassigned to
+  property-figure highlighting (distinct from `accent`, used for contractor-income figures);
+  `warning` now owns all caution/near-limit semantics exclusively. No live consumer of
+  `secondary` yet (first property-calculator UI to need a highlight color gets it) - the one
+  existing `Badge variant="secondary"` usage (an FY tag on tip articles) was moved to `outline`
+  since a financial-year label isn't a property figure and would have been visually misleading
+  painted orange.
+- **Font: `next/font/google` Inter, not self-hosted `next/font/local` woff2.** No font binary
+  asset exists in the repo and this task's instruction was explicitly "no new runtime
+  dependencies" - `next/font/google` already downloads and self-hosts at build time (confirmed
+  by the Geist setup it replaced actually building successfully in this environment), so the
+  property the source doc cares about (preload + fallback-metrics, no render-blocking external
+  request at runtime) holds even though the delivery mechanism differs from the letter of the
+  spec.
+- **Motion/`data-state` note turned out to be a non-issue, not a translation task.** The source
+  doc references "Radix `data-state` enter/exit animations," but this shadcn version runs on
+  `@base-ui/react`, whose primitives already emit `data-open`/`data-closed`/`data-popup-open`
+  (confirmed directly in `dialog.tsx` and `dropdown-menu.tsx`), and `tw-animate-css` already
+  targets those attributes. Nothing needed changing - recorded in `docs/design.md` in case a
+  future hand-rolled primitive targets the wrong attribute set.
+- **Text-on-subtle contrast for success/warning/danger/neutral pills not independently
+  verified** - the source doc gives explicit ratios for accent/secondary text-on-subtle pairs
+  but not for the other four; TaxOps followed the same 700-on-50 convention without measuring.
+  Flagged in `docs/design.md` for a follow-up audit before leaning on those pairs for anything
+  beyond decorative pill backgrounds.
+
+### Verification
+
+- Full quality loop green: `typecheck && lint && validate:content && test && build` - all 129
+  existing tests pass unmodified (none needed updating: the disclaimer test matches on the
+  literal text node, which was preserved; no test asserts on specific class names or colors).
+- Grepped for raw hex/`oklch()`/`rgb()` literals and Tailwind default color-scale utilities
+  (`bg-red-500` etc.) across `src/` and `content/` outside `globals.css`, and for `style={`
+  outside the pre-existing Sonner CSS-var passthrough: all zero, confirming the "raw hex lives
+  only in the token file" rule held through the whole re-skin.
+- `next build` output confirms the app compiles and every route still prerenders/serves
+  correctly (static marketing/auth pages, dynamic app/calculator routes, the 3 SSG tip
+  articles) with the new token set and font.
+- **Gap, stated explicitly rather than glossed over**: no browser/Playwright tool available in
+  this environment (same gap as every prior day), so the re-skin was not visually inspected in
+  a live browser - no screenshot, no manual click-through of focus states, hover states, or the
+  boxed Disclaimer's actual rendered appearance. Typecheck/lint/tests/build passing verifies the
+  code is correct and wired together; it does not verify the result *looks* right. Flagging this
+  as the one thing still owed before treating this reskin as done, not just built.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

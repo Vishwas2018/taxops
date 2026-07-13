@@ -40,8 +40,8 @@ export default async function TipArticlePage({ params }: { params: ArticleParams
   return (
     <article>
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary">FY{frontmatter.financialYear}</Badge>
-        <span className="text-sm text-muted-foreground">
+        <Badge variant="outline">FY{frontmatter.financialYear}</Badge>
+        <span className="text-sm text-textMuted">
           Reviewed: {formatReviewDate(frontmatter.reviewDate)}
         </span>
       </div>

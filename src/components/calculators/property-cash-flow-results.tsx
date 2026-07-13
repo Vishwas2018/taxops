@@ -25,7 +25,7 @@ export function PropertyCashFlowResults({ data }: { data: PropertyCashFlowResult
         <CardTitle>Estimated results — FY{data.financialYear}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        <dl className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm">
+        <dl className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm tabular-nums">
           <dt />
           <dt className="text-muted-foreground">Annual</dt>
           <dt className="text-muted-foreground">Per week</dt>
@@ -43,7 +43,7 @@ export function PropertyCashFlowResults({ data }: { data: PropertyCashFlowResult
 
         <Separator />
 
-        <dl className="grid grid-cols-3 gap-x-4 gap-y-2">
+        <dl className="grid grid-cols-3 gap-x-4 gap-y-2 tabular-nums">
           <dt className="font-semibold">After-tax cash flow</dt>
           <dd className="text-right font-semibold">{formatCurrency(data.afterTaxCashFlow)}</dd>
           <dd className="text-right font-semibold">
@@ -51,7 +51,7 @@ export function PropertyCashFlowResults({ data }: { data: PropertyCashFlowResult
           </dd>
         </dl>
 
-        <p className="text-sm">
+        <p className="text-sm tabular-nums">
           {data.isNegativelyGeared ? (
             <span>
               This property is <strong>negatively geared</strong> - your rental result is a loss
