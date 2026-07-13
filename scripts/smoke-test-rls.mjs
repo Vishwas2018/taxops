@@ -1,7 +1,11 @@
-// One-off local-dev smoke test for Row Level Security (+ Day 7's partial-upsert mechanism, +
-// Day 8's checklist state tables). Not part of the automated test suite (needs a running
-// `supabase start` stack); run manually after schema changes touch RLS policies. Creates a
-// throwaway second user via the service-role client, then verifies:
+// One-off smoke test for Row Level Security (+ Day 7's partial-upsert mechanism, + Day 8's
+// checklist state tables). Not part of the automated test suite; run manually after schema
+// changes touch RLS policies, against either the local `supabase start` stack or a hosted
+// staging project (Day 10) - point NEXT_PUBLIC_SUPABASE_URL/SMOKE_TEST_*_KEY at either. Ensures
+// its own demo user exists via the service-role admin API rather than assuming
+// `supabase/seed.sql` has run (seed.sql is local-dev-only by design - `supabase db push`
+// against a hosted project never runs it, only migrations), so this script works unmodified in
+// both places. Creates a throwaway second user via the service-role client, then verifies:
 //   1. An anon (unauthenticated) client reads zero rows from `profiles`.
 //   2. An authenticated client reads exactly its own `profiles` row, never another user's.
 //   3. A partial upsert (`{ id, oneColumn }`) updates only that column, leaving the rest of
@@ -25,7 +29,6 @@ if (!ANON_KEY || !SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
-const DEMO_USER_ID = "11111111-1111-1111-1111-111111111111";
 const DEMO_EMAIL = "demo@taxops.local";
 const DEMO_PASSWORD = "password123";
 const SECOND_EMAIL = `rls-smoke-${Date.now()}@taxops.local`;
@@ -44,6 +47,41 @@ function assert(condition, message) {
     failures += 1;
   }
 }
+
+console.log("Ensuring the demo user exists...");
+// `supabase/seed.sql` inserts this user with a fixed id via raw SQL (only possible against
+// `auth.users` directly, not through the admin API) - locally, `supabase db reset` already ran
+// it. On a hosted project there's no seed step at all, so this looks the user up first and
+// only creates it if missing, using whatever id GoTrue assigns rather than assuming the seed's
+// hardcoded `11111111-...`.
+const { data: existingUsers, error: listUsersErr } = await admin.auth.admin.listUsers();
+if (listUsersErr) {
+  console.error("Could not list users:", listUsersErr.message);
+  process.exit(1);
+}
+let DEMO_USER_ID = existingUsers.users.find((user) => user.email === DEMO_EMAIL)?.id;
+if (!DEMO_USER_ID) {
+  const { data: createdDemo, error: createDemoErr } = await admin.auth.admin.createUser({
+    email: DEMO_EMAIL,
+    password: DEMO_PASSWORD,
+    email_confirm: true,
+  });
+  if (createDemoErr) {
+    console.error("Could not create demo user:", createDemoErr.message);
+    process.exit(1);
+  }
+  DEMO_USER_ID = createdDemo.user.id;
+}
+await admin
+  .from("profiles")
+  .upsert({ id: DEMO_USER_ID, work_arrangement: "mix" }, { onConflict: "id" });
+// Section 4 below compares this row's `checked` value before/after an unrelated upsert, to
+// prove the unrelated write left it alone - needs to exist first with a known value.
+const OTHER_DEMO_ITEM_ID = "property-documents.loan-statements";
+await admin.from("checklist_item_states").upsert(
+  { user_id: DEMO_USER_ID, item_id: OTHER_DEMO_ITEM_ID, checked: true, checked_at: new Date().toISOString() },
+  { onConflict: "user_id,item_id" },
+);
 
 console.log("Setting up throwaway second user...");
 const { data: created, error: createErr } = await admin.auth.admin.createUser({
@@ -227,7 +265,7 @@ try {
 
   // A targeted upsert against one item_id must not touch the demo user's other item_id rows -
   // the same partial-write isolation Day 7 verified for `profiles`, now for a per-item-id table.
-  const OTHER_DEMO_ITEM_ID = "property-documents.loan-statements";
+  // (OTHER_DEMO_ITEM_ID + its seeded row are set up front, near the demo-user bootstrap above.)
   const { data: otherItemBefore } = await authed
     .from("checklist_item_states")
     .select("checked")

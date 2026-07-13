@@ -1,5 +1,6 @@
 import { test } from "@playwright/test";
 import { fillNumberField } from "../lib/form";
+import { createE2ESupabaseAdminClient, getE2EUserId, resetE2EUserData } from "../lib/supabase-admin";
 
 /**
  * Not snapshot-diff tests (no flake budget for that in v1 - see PROGRESS.md Day 9) - just
@@ -36,6 +37,14 @@ test("capture dashboard", async ({ page }) => {
 });
 
 test("capture tax profile wizard step", async ({ page }) => {
+  // Reset first: `/profile` shows the summary/edit view once any answer exists (which the
+  // shared E2E user will have, left by other specs in the same run) rather than the fresh
+  // multi-step wizard this screenshot is meant to show - caught during Day 10's screenshot
+  // review, when 05-profile-wizard-step.png turned out to be the summary view.
+  const admin = createE2ESupabaseAdminClient();
+  const userId = await getE2EUserId(admin);
+  await resetE2EUserData(admin, userId);
+
   await page.goto("/profile");
   await shoot(page, "05-profile-wizard-step");
 });

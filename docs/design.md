@@ -5,10 +5,21 @@ Adapted from the FamilyFlux design theme (source verbatim at
 [Divergences](#divergences-from-familyflux) for what was deferred and why.
 
 Token architecture: every color is a CSS custom property holding **space-separated RGB
-channels** (`--accent: 79 70 229;`), wired into Tailwind v4's `@theme` block as
-`rgb(var(--accent) / <alpha-value>)` so opacity modifiers work (`bg-accent/60`). Components
+channels** (`--accent: 79 70 229;`), wired into Tailwind v4's `@theme` block as plain
+`rgb(var(--accent))`. Opacity modifiers (`bg-accent/60`) work automatically — Tailwind v4
+generates `color-mix()`-based CSS for any plain color value, no extra syntax needed. Components
 use semantic class names only (`bg-surface`, `text-textPrimary`) — raw hex lives exclusively
 in `src/app/globals.css`.
+
+**Tailwind v3→v4 divergence, found and fixed Day 9**: this block originally read
+`rgb(var(--accent) / <alpha-value>)` — a Tailwind v3 convention where the `<alpha-value>`
+placeholder is substituted by v3's plugin engine at build time. Tailwind v4 (this project's
+actual version since Day 1) has no such substitution step, so every `--color-*` variable
+computed as the literal, invalid string `"rgb(79 70 229 / <alpha-value>)"`, which the browser
+silently drops — every themed color in the app rendered as nothing (transparent/inherited) from
+the Day 6.5 reskin until Day 9's first real screenshots caught it. See PROGRESS.md Day 9 for the
+full writeup. If porting *other* pieces of the FamilyFlux source doc (`design-theme-source.md`)
+that show the `<alpha-value>` pattern, drop the placeholder the same way.
 
 ## Non-negotiable rules
 

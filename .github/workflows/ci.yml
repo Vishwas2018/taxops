@@ -68,6 +68,12 @@ jobs:
           # e2e/lib/supabase-admin.ts shells out to `supabase status -o json` for these when
           # unset locally; CI injects them directly since the CLI is already available here.
           NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54331
+          # The local Supabase CLI's fixed dev anon key (derived from the well-known default
+          # local JWT secret in supabase/config.toml, printed by `supabase status` on every
+          # machine) - not a real secret, but the app needs a working one at runtime (proxy.ts's
+          # updateSession call fails fast without it - the first CI run of this job hit exactly
+          # that, since only SUPABASE_SERVICE_ROLE_KEY had been wired here).
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CI_SUPABASE_SERVICE_ROLE_KEY }}
 
       - name: Upload Playwright report
