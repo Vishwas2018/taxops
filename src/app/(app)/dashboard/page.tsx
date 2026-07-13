@@ -3,6 +3,10 @@ import Link from "next/link";
 import { CALCULATORS } from "@/app/(app)/calculators/page";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getChecklistCustomItems, getChecklistItemStates } from "@/lib/checklists/data";
+import { computeOverallProgress } from "@/lib/checklists/derived";
+import { getDefaultChecklistGroupIds } from "@/lib/checklists/select";
+import { CHECKLIST_GROUPS } from "@/lib/checklists/templates";
 import { CATEGORY_LABELS } from "@/lib/content/schema";
 import { createClient } from "@/lib/supabase/server";
 import { getTaxProfile } from "@/lib/tax-profile/data";
@@ -27,10 +31,25 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const profile = (await getTaxProfile(supabase, user.id)) ?? {};
+  const rawProfile = await getTaxProfile(supabase, user.id);
+  const profile = rawProfile ?? {};
   const completeness = computeProfileCompleteness(profile);
   const relevantCategories = getRelevantTipCategories(profile);
   const highlightContractorTakeHome = isContractorLikeArrangement(profile.workArrangement);
+
+  const [checklistItemStates, checklistCustomItems] = await Promise.all([
+    getChecklistItemStates(supabase, user.id),
+    getChecklistCustomItems(supabase, user.id),
+  ]);
+  const defaultChecklistGroupIds = getDefaultChecklistGroupIds(rawProfile);
+  const defaultChecklistGroups = CHECKLIST_GROUPS.filter((group) =>
+    defaultChecklistGroupIds.includes(group.id),
+  );
+  const checklistProgress = computeOverallProgress(
+    defaultChecklistGroups,
+    checklistItemStates,
+    checklistCustomItems,
+  );
 
   return (
     <div className="space-y-8">
@@ -58,6 +77,32 @@ export default async function DashboardPage() {
             className="text-sm font-medium text-accent underline-offset-4 hover:underline"
           >
             {completeness.answered === 0 ? "Start your tax profile" : "Review your tax profile"}
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">EOFY checklist</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-textSecondary">
+              {checklistProgress.checked} of {checklistProgress.total} items checked
+            </span>
+            <span className="font-medium">{checklistProgress.percent}%</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutralSubtle">
+            <div
+              className="h-full rounded-full bg-accent transition-all duration-200 ease-in-out"
+              style={{ width: `${checklistProgress.percent}%` }}
+            />
+          </div>
+          <Link
+            href="/checklists"
+            className="text-sm font-medium text-accent underline-offset-4 hover:underline"
+          >
+            Go to your checklists
           </Link>
         </CardContent>
       </Card>

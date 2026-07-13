@@ -82,33 +82,28 @@ values (
 )
 on conflict (id) do nothing;
 
-with new_checklist as (
-  insert into public.checklists (id, user_id, profile_type, financial_year)
-  values (
-    '22222222-2222-2222-2222-222222222222',
-    '11111111-1111-1111-1111-111111111111',
-    'both',
-    'FY2025-26'
-  )
-  on conflict (id) do nothing
-  returning id
+-- Day 8: checklist state only - the checklist *content* is code (src/lib/checklists/templates.ts),
+-- so seeding here just marks a couple of template items checked plus one custom item, matching
+-- the demo persona (contractor + one investment property).
+insert into public.checklist_item_states (user_id, item_id, checked, checked_at)
+values
+  ('11111111-1111-1111-1111-111111111111', 'contractor-income-expense.bank-statements-business', true, now()),
+  ('11111111-1111-1111-1111-111111111111', 'property-documents.loan-statements', true, now())
+on conflict (user_id, item_id) do nothing;
+
+-- id uses a valid v4-shaped UUID (version nibble 4, variant nibble 8) - the app's
+-- editCustomItemLabelSchema/toggleCustomItemSchema/deleteCustomItemSchema validate with
+-- z.uuid(), which rejects a plain repeated-digit id like '33333333-...-333333333333'.
+insert into public.checklist_custom_items (id, user_id, group_id, label, checked, position)
+values (
+  '33333333-3333-4333-8333-333333333333',
+  '11111111-1111-1111-1111-111111111111',
+  'property-documents',
+  '2019 depreciation schedule',
+  false,
+  0
 )
-insert into public.checklist_items (checklist_id, label, is_agent_question, sort_order)
-select
-  '22222222-2222-2222-2222-222222222222',
-  label,
-  is_agent_question,
-  sort_order
-from (
-  values
-    ('Gather all payment summaries / income statements', false, 0),
-    ('Collect receipts for work-related expenses', false, 1),
-    ('Reconcile rental income and expenses for each property', false, 2),
-    ('Confirm depreciation schedule is up to date', false, 3),
-    ('Ask my tax agent: am I affected by Division 293 this year?', true, 4),
-    ('Ask my tax agent: does my PSI status change my deduction eligibility?', true, 5)
-) as items (label, is_agent_question, sort_order)
-where exists (select 1 from new_checklist);
+on conflict (id) do nothing;
 
 insert into public.saved_articles (user_id, article_slug)
 values ('11111111-1111-1111-1111-111111111111', 'contractor-expenses/home-office-deductions')

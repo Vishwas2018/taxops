@@ -1,12 +1,15 @@
-// One-off local-dev smoke test for Row Level Security (+ Day 7's partial-upsert mechanism).
-// Not part of the automated test suite (needs a running `supabase start` stack); run manually
-// after schema changes touch RLS policies. Creates a throwaway second user via the
-// service-role client, then verifies:
+// One-off local-dev smoke test for Row Level Security (+ Day 7's partial-upsert mechanism, +
+// Day 8's checklist state tables). Not part of the automated test suite (needs a running
+// `supabase start` stack); run manually after schema changes touch RLS policies. Creates a
+// throwaway second user via the service-role client, then verifies:
 //   1. An anon (unauthenticated) client reads zero rows from `profiles`.
 //   2. An authenticated client reads exactly its own `profiles` row, never another user's.
 //   3. A partial upsert (`{ id, oneColumn }`) updates only that column, leaving the rest of
 //      the demo user's row untouched - the mechanism the Guided Tax Profile's section-edit
 //      feature relies on.
+//   4. An authenticated client cannot read, update, or delete another user's
+//      `checklist_item_states` / `checklist_custom_items` rows, and a targeted upsert against
+//      one item_id leaves every other item_id row for the same user untouched.
 // Exits non-zero on any assertion failure.
 
 import { createClient } from "@supabase/supabase-js";
@@ -62,6 +65,33 @@ if (profileErr) {
   console.error("Could not seed throwaway user's profile:", profileErr.message);
   process.exit(1);
 }
+
+const SECOND_ITEM_ID = "receipts-evidence.donation-receipts";
+const { error: secondItemStateErr } = await admin.from("checklist_item_states").insert({
+  user_id: secondUserId,
+  item_id: SECOND_ITEM_ID,
+  checked: true,
+  checked_at: new Date().toISOString(),
+});
+if (secondItemStateErr) {
+  console.error("Could not seed throwaway user's checklist item state:", secondItemStateErr.message);
+  process.exit(1);
+}
+
+const { data: secondCustomItem, error: secondCustomItemErr } = await admin
+  .from("checklist_custom_items")
+  .insert({
+    user_id: secondUserId,
+    group_id: "receipts-evidence",
+    label: "Throwaway user's custom item",
+  })
+  .select("id")
+  .single();
+if (secondCustomItemErr) {
+  console.error("Could not seed throwaway user's custom item:", secondCustomItemErr.message);
+  process.exit(1);
+}
+const secondCustomItemId = secondCustomItem.id;
 
 try {
   console.log("\n1. Anon client should get zero rows of data from profiles:");
@@ -135,6 +165,97 @@ try {
       { id: DEMO_USER_ID, household_income_band: before?.household_income_band },
       { onConflict: "id" },
     );
+
+  console.log("\n4. Checklist tables (Day 8) enforce owner-only read/write/delete:");
+
+  const { data: itemStateRows, error: itemStateReadErr } = await authed
+    .from("checklist_item_states")
+    .select("item_id")
+    .eq("user_id", secondUserId);
+  assert(!itemStateReadErr, `own-client select against another user's item states did not error (RLS-filtered, not rejected)`);
+  assert(
+    (itemStateRows?.length ?? -1) === 0,
+    `cannot read the second user's checklist_item_states row (got ${itemStateRows?.length ?? "N/A"})`,
+  );
+
+  const { data: itemStateUpdateResult } = await authed
+    .from("checklist_item_states")
+    .update({ checked: false })
+    .eq("user_id", secondUserId)
+    .eq("item_id", SECOND_ITEM_ID)
+    .select("item_id");
+  assert(
+    (itemStateUpdateResult?.length ?? -1) === 0,
+    "cannot update the second user's checklist_item_states row (zero rows affected)",
+  );
+  const { data: secondItemStateAfter } = await admin
+    .from("checklist_item_states")
+    .select("checked")
+    .eq("user_id", secondUserId)
+    .eq("item_id", SECOND_ITEM_ID)
+    .single();
+  assert(
+    secondItemStateAfter?.checked === true,
+    "second user's item state was not changed by the other user's update attempt",
+  );
+
+  const { data: customItemRows, error: customItemReadErr } = await authed
+    .from("checklist_custom_items")
+    .select("id")
+    .eq("user_id", secondUserId);
+  assert(!customItemReadErr, `own-client select against another user's custom items did not error (RLS-filtered, not rejected)`);
+  assert(
+    (customItemRows?.length ?? -1) === 0,
+    `cannot read the second user's checklist_custom_items row (got ${customItemRows?.length ?? "N/A"})`,
+  );
+
+  const { data: deleteResult } = await authed
+    .from("checklist_custom_items")
+    .delete()
+    .eq("id", secondCustomItemId)
+    .select("id");
+  assert(
+    (deleteResult?.length ?? -1) === 0,
+    "cannot delete the second user's checklist_custom_items row (zero rows affected)",
+  );
+  const { data: secondCustomItemAfter } = await admin
+    .from("checklist_custom_items")
+    .select("id")
+    .eq("id", secondCustomItemId)
+    .maybeSingle();
+  assert(!!secondCustomItemAfter, "second user's custom item still exists after the other user's delete attempt");
+
+  // A targeted upsert against one item_id must not touch the demo user's other item_id rows -
+  // the same partial-write isolation Day 7 verified for `profiles`, now for a per-item-id table.
+  const OTHER_DEMO_ITEM_ID = "property-documents.loan-statements";
+  const { data: otherItemBefore } = await authed
+    .from("checklist_item_states")
+    .select("checked")
+    .eq("user_id", DEMO_USER_ID)
+    .eq("item_id", OTHER_DEMO_ITEM_ID)
+    .single();
+  const TARGET_ITEM_ID = "contractor-income-expense.invoices-issued";
+  const { error: targetUpsertErr } = await authed.from("checklist_item_states").upsert(
+    { user_id: DEMO_USER_ID, item_id: TARGET_ITEM_ID, checked: true, checked_at: new Date().toISOString() },
+    { onConflict: "user_id,item_id" },
+  );
+  assert(!targetUpsertErr, `targeted checklist item upsert did not error (${targetUpsertErr?.message ?? "ok"})`);
+  const { data: otherItemAfter } = await authed
+    .from("checklist_item_states")
+    .select("checked")
+    .eq("user_id", DEMO_USER_ID)
+    .eq("item_id", OTHER_DEMO_ITEM_ID)
+    .single();
+  assert(
+    otherItemAfter?.checked === otherItemBefore?.checked,
+    `untouched item_id row was left alone (${OTHER_DEMO_ITEM_ID} checked still ${otherItemAfter?.checked})`,
+  );
+  // Restore idempotency: remove the row this run just created.
+  await authed
+    .from("checklist_item_states")
+    .delete()
+    .eq("user_id", DEMO_USER_ID)
+    .eq("item_id", TARGET_ITEM_ID);
 } finally {
   console.log("\nCleaning up throwaway user...");
   await admin.auth.admin.deleteUser(secondUserId);
