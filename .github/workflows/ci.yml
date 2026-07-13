@@ -30,6 +30,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Validate content
+        run: npm run validate:content
+
       - name: Unit tests (with coverage)
         run: npm run test:coverage
 

@@ -76,6 +76,7 @@ export function PropertyCashFlowResults({ data }: { data: PropertyCashFlowResult
             <li>Land tax</li>
             <li>Borrowing-cost amortization</li>
             <li>Loan principal repayments or depreciation recapture on sale</li>
+            <li>Assumes your marginal tax rate stays unchanged by this property&apos;s income or loss</li>
           </ul>
         </div>
 

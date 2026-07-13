@@ -510,11 +510,135 @@ revisit only if a fourth calculator makes the duplication actually painful.
   authenticated click-through wasn't done; RTL integration tests exercise the full
   component→Zod→engine pipeline in jsdom, which is the strongest verification available here.
 
+## Day 6 — Carry-over Fix + MDX Content Pipeline (2026-07-13)
+
+### Carry-over: property calculator exclusion (5 min)
+
+Added "assumes your marginal tax rate stays unchanged by this property's income or loss" to
+`PropertyCashFlowResults`' explicit exclusions list (`src/components/calculators/property-cash-flow-results.tsx`)
+— the engine takes `marginalTaxRate` as a fixed input (Day 5's deviation) and never re-derives
+it from the property's own result, so this is a real, previously-unstated assumption, not just
+wording. One new test asserting the line renders (`property-cash-flow-results.test.tsx`).
+
+### Toolchain decision: `next-mdx-remote/rsc` + `gray-matter`, not `@next/mdx`
+
+`@next/mdx` turns each `.mdx` file into its own route/page component (a webpack/Turbopack
+loader over file-system routing) - it has no built-in way to enumerate frontmatter across many
+articles for a single dynamic `/tips/[slug]` route and a grouped `/tips` index. `next-mdx-remote/rsc`'s
+`compileMDX` compiles a raw MDX string (read from `content/` at request/build time) into a React
+element inside a Server Component, which fits this app's "one dynamic route, one index page,
+build-time content" shape directly. `gray-matter` (already the de facto standard, 4KB, zero
+heavy deps) does frontmatter extraction for both the app's content loader and the standalone
+validation script, so there's exactly one parser for frontmatter in the codebase. Two new
+dependencies, justified per the Simplicity First rule rather than reaching for a CMS or
+`contentlayer` (unmaintained, doesn't support Next 16).
+
+### Built
+
+- **`src/lib/content/schema.ts`**: `articleFrontmatterSchema` (Zod) + `ArticleFrontmatter` type
+  - `title`, `description` (≤160 chars), `slug` (kebab-case), `category` (enum, matches the four
+    v1 categories), `financialYear` (`"2025-26"` shape), `reviewDate` (`z.iso.date()`),
+    `sources` (min 1, `{ label, url }`), `tags` (optional), `draft` (boolean). No `author`, no
+    `heroImage` - neither has a consumer.
+  - `isReviewDateStale(reviewDate, asOf?)`: stale strictly after the 12-month anniversary date
+    of `reviewDate`, not a whole-calendar-months count (avoids day-of-month edge cases). Wired
+    into the schema via `.refine()` so a stale `reviewDate` is just another schema validation
+    failure, not a separate code path. `createArticleFrontmatterSchema(now?)` factory makes
+    `now` injectable for tests; `articleFrontmatterSchema` is the real-clock production
+    instance.
+- **`src/lib/content/articles.ts`**: `getAllArticles()` / `getAllArticleSlugs()` /
+  `getArticleBySlug()`. Reads `content/<category>/*.mdx` via `node:fs`, parses with
+  `gray-matter`, validates with the schema (throws on a bad file - no silent fallback), filters
+  out `draft: true`. Re-reads the small content tree on every call rather than caching; revisit
+  only if the article count grows enough to matter (still n<10 here).
+- **`/tips`** (`src/app/(marketing)/tips/page.tsx`): replaced the Day 2 stub. Groups published
+  articles by category (skips a category heading entirely if it has zero articles, e.g.
+  wealth-preservation for now), title + description per article, no search/pagination/tag
+  filtering per instruction (n=3).
+- **`/tips/[slug]`** (`.../tips/[slug]/page.tsx` + `layout.tsx`): `generateStaticParams` over
+  published slugs (all 3 seed articles prerendered at build time - confirmed in the build
+  output below, not just claimed). Page renders the FY badge, "Reviewed: <date>", the MDX body
+  via `compileMDX`, and a "Sources & further reading" list. **The disclaimer is injected by
+  `layout.tsx`**, not the page - an MDX article file has no mechanism to render its own layout,
+  so it structurally cannot omit or paraphrase it, which is a stronger guarantee than "authors
+  are asked not to."
+- **`npm run validate:content`** (`scripts/validate-content.ts`): parses every `content/**/*.mdx`
+  frontmatter against the same schema the app uses, plus two checks a schema alone can't
+  express: (1) filename must equal `frontmatter.slug`, and the containing folder must equal
+  `frontmatter.category` - a cheap catch for copy-paste mistakes across articles; (2) the
+  article body must not contain the standard disclaimer text - the layout already injects it,
+  so a duplicate copy in an MDX file would both violate "never weaken/paraphrase the
+  disclaimer" (by inviting drift between the two copies) and look redundant to a reader. Exits
+  1 with a per-file error list on any failure, 0 with a pass count otherwise. Wired into
+  `.github/workflows/ci.yml` (right after lint) and into `CLAUDE.md`'s quality-loop line.
+- **3 seed articles** (`content/<category>/<slug>.mdx`, 300-500 words each, plain-language,
+  educational framing, no "you should claim" language, explicit eligibility/scope caveats,
+  real ATO source URLs - reusing the exact superannuation URL already verified in
+  `fy2025-26.ts` for consistency):
+  - `contractor-expenses/claiming-work-related-expenses-as-a-contractor.mdx` (434 words)
+  - `property-deductions/repairs-vs-improvements-rental-property.mdx` (437 words)
+  - `superannuation/concessional-contributions-cap-explained.mdx` (386 words)
+
+### Deviations
+
+- **Seed articles marked `draft: false`, not `draft: true`.** CLAUDE.md's v1 scope (module 4)
+  says "all articles ship `draft: true` until the Day 8 human gate approves them" - this Day 6
+  message explicitly instructed `draft: false` "as pipeline-proving placeholders" with content
+  review logged as owed before public launch. Followed the newer, explicit instruction (same
+  precedent as Day 3's restructuring) rather than silently reverting to `draft: true`, and
+  updated CLAUDE.md's module 4 description to say so. **Flagging for Gate 2**: these three
+  articles have not had the ATO-guidance review Gate 2 calls for - they exist to prove the
+  pipeline (schema, validation, rendering, staleness enforcement) works end-to-end, not as
+  reviewed public content. Do not treat their presence as content sign-off.
+- **`draft` has one consumer today** (the content loader filters it out of `getAllArticles()`,
+  so a future `draft: true` article is built but not listed/reachable) - no admin UI or preview
+  route was added for viewing a draft article directly, since nothing in this task asked for
+  one and there's no reviewer-facing surface yet to put it in.
+- **`tsconfig.json`**: added `allowImportingTsExtensions: true`. `scripts/validate-content.ts`
+  imports `../src/lib/content/schema.ts` and `../src/lib/disclaimers/index.ts` with explicit
+  `.ts` extensions, which Node's native TypeScript support (enabled by default on this
+  project's Node 24) requires for relative specifiers, but which `tsc` rejects by default under
+  `moduleResolution: "bundler"` unless this flag is set. Safe here because `noEmit` is already
+  `true` project-wide - this flag only affects what import specifiers typecheck, not what Next
+  emits.
+- **No `ts-node`/`tsx` dependency added** for the validation script - Node 24 (this project's
+  pinned CI/dev version) runs `.ts` files natively via type-stripping, so `scripts/validate-content.ts`
+  runs directly (`node --no-warnings scripts/validate-content.ts`). `--no-warnings` only
+  suppresses a cosmetic "module type not specified" perf warning; it changes no behavior.
+
+### Verification
+
+- Full quality loop green: `typecheck && lint && validate:content && test:coverage && build`.
+  129 tests total (38 new: 14 schema, 6 content-loader, 7 validate-content script
+  integration tests via real `spawnSync` child processes against fixture directories, 1
+  carry-over property-calculator test, 1 article-layout test, 5 article-page tests, 4 index-page
+  tests), 100% coverage maintained on `src/lib/calculators/`.
+- **Build output confirms build-time compilation, not just claimed**: `next build` shows
+  `● /tips/[slug]` (SSG) with all three seed slugs individually listed as prerendered, and `○
+  /tips` static. Inspected the prerendered HTML for one article directly (not just the RTL
+  test) and confirmed the disclaimer text, "Reviewed:", "Sources", and the real ATO source URL
+  all appear in the shipped output.
+- **Stale-reviewDate boundary tested at the day level**, per the "every threshold needs a
+  boundary test" habit from the calculators: exactly at the 12-month anniversary (not stale),
+  one day after (stale), one day before (not stale).
+- **validate:content script tested as a real subprocess**, not just its internals: each test
+  spawns `node --no-warnings scripts/validate-content.ts` against a fresh temp fixture directory
+  (via `VALIDATE_CONTENT_DIR`, a test-only env override - unset in every real invocation) and
+  asserts the actual exit code and stderr/stdout text for: all-valid, schema failure,
+  slug/filename mismatch, category/folder mismatch, stale reviewDate, and disclaimer
+  duplication.
+- Same stated gap as prior days: no browser/Playwright tool in this environment, so a real
+  authenticated-or-not click-through of `/tips` and `/tips/[slug]` wasn't done in a live
+  browser; the RTL tests render the actual page/layout component tree and the build output was
+  inspected directly, which is the strongest verification available here.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off
   before calculator UIs are built on top.
 - ⛔ **Gate 2** (end of Day 8): all article content + calculator outputs reviewed against ATO
-  guidance; articles stay `draft: true` until approved.
+  guidance; articles stay `draft: true` until approved. **Note (Day 6)**: the 3 seed articles
+  currently ship `draft: false` as pipeline-proving placeholders per explicit Day 6 instruction
+  - they still need this review before being treated as approved public content.
 - ⛔ **Gate 3** (end of Day 10): production Supabase project + Vercel env vars + deploy
   approval.

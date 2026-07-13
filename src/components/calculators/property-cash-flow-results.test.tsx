@@ -39,6 +39,23 @@ describe("PropertyCashFlowResults", () => {
     expect(screen.getByText("Borrowing-cost amortization")).toBeInTheDocument();
   });
 
+  it("states the marginal-rate-unchanged assumption as an explicit exclusion", () => {
+    const data = calculatePropertyCashFlow(
+      {
+        annualRentalIncome: 20_000,
+        annualExpenses: 5_000,
+        annualLoanInterest: 12_000,
+        annualDepreciation: 6_000,
+        marginalTaxRate: 0.37,
+      },
+      fy2025_26,
+    );
+    render(<PropertyCashFlowResults data={data} />);
+    expect(
+      screen.getByText(/assumes your marginal tax rate stays unchanged by this property.s income or loss/i),
+    ).toBeInTheDocument();
+  });
+
   it("renders a negatively-geared loss clearly and correctly, not as a misleading positive", () => {
     // Loss of $3,000 (rent $20k - expenses $5k - interest $12k - depreciation $6k = -$3k).
     // Pre-tax cash flow (excludes depreciation) is +$3,000, so this also proves the panel

@@ -73,8 +73,9 @@ colour-only meaning (pair colour with icon/text/pattern).
 
 ## 7. Quality loop
 
-After every feature: `npm run typecheck && npm run lint && npm test && npm run build`. Fix all
-failures before moving on. Commit with Conventional Commits after each green cycle.
+After every feature: `npm run typecheck && npm run lint && npm run validate:content && npm test
+&& npm run build`. Fix all failures before moving on. Commit with Conventional Commits after
+each green cycle.
 
 ## The three unforgivable shortcuts
 
@@ -101,10 +102,14 @@ rule should bend.
 3. **EOFY Checklists** — templated per profile type (contractor / investor / both),
    user-checkable items persisted to Supabase, includes a "questions for your tax agent"
    section.
-4. **Tax Tips Knowledge Base** — MDX articles under `content/`, four categories:
-   contractor-expenses, property-deductions, superannuation, wealth-preservation.
-   Frontmatter: `title, category, financialYear, reviewedDate, sources, profileTags, draft`.
-   All articles ship `draft: true` until the Day 8 human gate approves them.
+4. **Tax Tips Knowledge Base** — MDX articles under `content/<category>/<slug>.mdx`, four
+   categories: contractor-expenses, property-deductions, superannuation, wealth-preservation.
+   Frontmatter (Zod-validated, `src/lib/content/schema.ts`): `title, description (≤160 chars),
+   slug, category, financialYear, reviewDate, sources (min 1, label+url), tags?, draft`. Build
+   fails (`npm run validate:content`) on a schema error, a `reviewDate` more than 12 months
+   old, a slug/folder mismatch, or an article body duplicating the disclaimer text. The Day 6
+   seed articles are marked `draft: false` as pipeline-proving placeholders — see PROGRESS.md
+   for why this deviates from "all articles ship `draft: true`" and what's owed before launch.
 5. **Dashboard** — saved articles, checklist progress, saved calculator scenarios, tax
    profile summary, account settings. No newsletter, no email provider in v1.
 
@@ -122,7 +127,7 @@ their owner.
 | Framework | Next.js 16 (App Router, Cache Components **disabled** — see below), TypeScript strict |
 | Database + Auth | Supabase: Postgres, Supabase Auth (email + magic link), RLS on every user table |
 | Data access | `@supabase/supabase-js` + `@supabase/ssr`. No ORM. |
-| Content | File-based MDX in `content/`. No CMS. |
+| Content | File-based MDX in `content/`. No CMS, no runtime fetching. Rendered with `next-mdx-remote/rsc` (`compileMDX`); frontmatter parsed with `gray-matter`. See Day 6 PROGRESS.md entry for why over `@next/mdx`. |
 | Styling | Tailwind CSS v4 + shadcn/ui (on `@base-ui/react`, not Radix — this shadcn version's default) |
 | Validation | Zod (v4), shared schemas in `src/lib/validation/` |
 | Forms | `react-hook-form` + `@hookform/resolvers/zod`. shadcn's `form.tsx` wrapper isn't in this registry version; a small local wrapper lives in `src/components/ui/form.tsx` once the first form needs it. |
