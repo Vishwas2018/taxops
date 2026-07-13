@@ -14,7 +14,16 @@ test("toggling a checklist item persists across a reload", async ({ page }) => {
   const checkbox = item.getByRole("checkbox");
   const wasChecked = (await checkbox.getAttribute("aria-checked")) === "true";
 
-  await checkbox.click();
+  // The checkbox toggles optimistically, then persists via a Server Action fired in the
+  // background (`toggleChecklistItemAction`, see checklist-group-section.tsx) - reloading
+  // before that background write lands races it and can read back the pre-toggle value. A
+  // real, previously-flaky finding (this test failed intermittently in CI - see PROGRESS.md
+  // Day 10), not just theoretical: wait for the actual network round-trip, not just the
+  // optimistic UI update, before reloading.
+  await Promise.all([
+    page.waitForResponse((res) => res.request().method() === "POST" && res.url().includes("/checklists")),
+    checkbox.click(),
+  ]);
   await expect(checkbox).toHaveAttribute("aria-checked", String(!wasChecked));
 
   await page.reload();
@@ -23,7 +32,10 @@ test("toggling a checklist item persists across a reload", async ({ page }) => {
   await expect(checkboxAfterReload).toHaveAttribute("aria-checked", String(!wasChecked));
 
   // Restore original state so this test is idempotent across repeated local runs.
-  await checkboxAfterReload.click();
+  await Promise.all([
+    page.waitForResponse((res) => res.request().method() === "POST" && res.url().includes("/checklists")),
+    checkboxAfterReload.click(),
+  ]);
   await expect(checkboxAfterReload).toHaveAttribute("aria-checked", String(wasChecked));
 });
 
