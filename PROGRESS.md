@@ -1430,6 +1430,84 @@ around; nothing was assumed to have passed.
   env-leakage check on the deployed bundle, §9's human smoke test - all four need
   `VERCEL_AUTOMATION_BYPASS_SECRET` to actually be reachable first.
 
+## Day 10 continuation 3 — Deploy Verification: a Real Outage Found (2026-07-13)
+
+### Bypass secret: reachable, but not from every tool in this session
+
+Re-checked both places per instruction: `gh secret list` now shows
+`VERCEL_AUTOMATION_BYPASS_SECRET` (GitHub Actions side, confirmed). This session's Bash shell
+still reported it unset - but PowerShell's `[Environment]::GetEnvironmentVariable(...,'User')`
+(a direct registry read, not process-inherited state) confirmed it **was** set. Root cause: a
+long-running shell process only has the environment it inherited at its own startup; a User-scope
+env var set afterward doesn't retroactively appear in an already-running process, only in new
+ones. This session's PowerShell tool calls happen to start a fresh process each time (so they
+saw it immediately); the Bash ones do not. Used PowerShell for the rest of this session's checks
+accordingly - worked around by picking the tool that could see it, not by declaring it
+unreachable a second time.
+
+### Verification result: the deployed staging app is currently down - a real, previously-unknown
+outage, not a false alarm
+
+With the bypass header attached (`x-vercel-protection-bypass`, past Vercel's SSO gate cleanly),
+every route tried returns **`500 Internal Server Error`**: `/`, `/tips`, `/sign-in`, `/sign-up`,
+`/dashboard`, `/auth/confirm` - reproduced 3 consecutive times, not transient. In the same
+deployment, `/favicon.ico` (a static asset, excluded from `proxy.ts`'s matcher) returns a clean
+`200` with correct headers and content. That contrast is the diagnosis: the build itself
+succeeded (static assets are being served correctly), but **every single non-static request
+fails identically**, including a fully static page (`/sign-in`) that has no page-level logic of
+its own to fail. The one thing that runs on literally every one of those requests and nothing
+else: `proxy.ts`, whose matcher excludes only static assets/images. Traced the code
+(`src/lib/supabase/middleware.ts`): `updateSession()` calls `requireEnv("NEXT_PUBLIC_SUPABASE_URL")`
+and `requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")`, each of which throws a hard `Error` if its
+variable is missing - exactly the failure mode that would produce this symmetric pattern.
+`NEXT_PUBLIC_SITE_URL` is not read by `proxy.ts` at all, so this points specifically at one or
+both Supabase env vars not actually reaching the deployed Edge Middleware runtime, despite being
+set in the Vercel dashboard per the continuation-1 message.
+
+**Not fixed by this agent** - no Vercel dashboard/API access exists in this environment, same
+human-owned boundary as project/env-var creation in §1/§6. `docs/deployment.md` §6 lists the
+specific things worth checking (environment scope Production-vs-Preview, Runtime-vs-Build-time
+scoping, exact variable name spelling, and whether a fresh deployment is needed after any
+correction since Vercel env var changes don't always retroactively apply to an already-built
+deployment).
+
+**Everything else this task asked to verify - `proxy.ts` redirect behavior, public page
+content, env-leakage in delivered HTML - is blocked behind this 500.** There's no successful
+response yet for any of those checks to inspect. Re-running the same curl commands once the env
+var issue is corrected will complete them in one pass - nothing else about the verification
+approach needs to change.
+
+### CI: deploy checks confirmed manual for v1, by decision
+
+Left `.github/workflows/ci.yml` untouched - no job wired to hit the deployed URL. Two reasons,
+written up in `docs/deployment.md` §8: (1) the `e2e` job's whole design tests a disposable local
+Supabase instance, a different concern from "is today's Vercel deployment healthy"; (2) the
+deployment is *currently* broken, so an automated check against it right now would turn CI red
+for an infrastructure reason unrelated to any code change - the wrong kind of signal for a gate
+to give. The bypass-header mechanism is documented and ready to wire in as a real job once the
+deployment itself is healthy again, so a first automated check starts green.
+
+### Deviations
+
+- **Used PowerShell instead of Bash for the deploy-verification curl checks** - the only tool in
+  this session that could see the freshly-set bypass secret without a shell restart (see above).
+- **No fix attempted for the 500** - purely a "stop and report" finding per this task's own
+  boundary; guessing at or attempting to change Vercel env var configuration without dashboard
+  access wasn't an option, and wouldn't have been appropriate even if it were, given the
+  human-owned-secrets boundary this whole deployment task has followed throughout.
+
+### Verification
+
+- Bypass secret reachability: confirmed present in GitHub Actions (`gh secret list`) and (via
+  PowerShell) this machine's registry - both checked directly, not assumed.
+- Deployed URL, 6 routes, 3 repeated checks: consistent `500` on every one, `200` on the one
+  static-asset control (`/favicon.ico`) - a real, reproduced-not-inferred finding.
+- Root-cause diagnosis is traced to specific source lines (`src/lib/supabase/middleware.ts`'s
+  two `requireEnv` calls), not a guess from the HTTP status alone.
+- **Not verified, still blocked on the human fixing the Vercel env var issue**: `proxy.ts`
+  redirect behavior on a working deployment, public page content, env-leakage in delivered HTML,
+  §9's human smoke test.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

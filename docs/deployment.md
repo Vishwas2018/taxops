@@ -257,14 +257,56 @@ The secret itself is generated once in **Settings → Deployment Protection → 
 for Automation** and referenced by name everywhere after - `VERCEL_AUTOMATION_BYPASS_SECRET`,
 never its value, in this doc, in CI (§8), or in any command's visible output/logs.
 
-**Status 2026-07-13**: not yet reachable from this environment or CI to actually run the checks
-- confirmed absent from this machine's User/Machine/Process environment scopes
-(`[Environment]::GetEnvironmentVariable(...)` in PowerShell all return unset) and absent from
-the repo's GitHub Actions secrets (`gh secret list` shows only `CI_SUPABASE_SERVICE_ROLE_KEY`).
-Build-success/`proxy.ts`/env-leakage checks against the deployed URL and §9's human smoke test
-both still need this resolved - flagged rather than worked around. Once the secret is actually
-set somewhere this agent can read it (or `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET` is run
-so a future CI job can use it), the checks above are ready to run immediately.
+**Verified reachable 2026-07-13**: `VERCEL_AUTOMATION_BYPASS_SECRET` confirmed present both as a
+GitHub Actions secret (`gh secret list`) and in this machine's registry-level User environment
+scope (readable via `[Environment]::GetEnvironmentVariable(...)`, though not by every shell -
+see the note below on a real environment quirk this surfaced).
+
+**Verification result: a real outage, found, not fixed.** With the bypass header attached, every
+route tried - `/`, `/tips`, `/sign-in`, `/sign-up`, `/dashboard`, `/auth/confirm` - returns
+**`500 Internal Server Error`**, reproduced 3 times consecutively (not transient). Static assets
+serve fine in the same deployment (`/favicon.ico` → `200`, correct headers, correct content),
+which narrows this precisely: **it isn't a build failure** (the build produced a working static
+asset bundle), it's something that runs on *every* non-static request, including a fully static
+page like `/sign-in` that has no reason to fail on its own. That pattern matches exactly one
+thing in this codebase: `proxy.ts`'s matcher covers everything except static assets/images, and
+every invocation calls `updateSession()` (`src/lib/supabase/middleware.ts`), which calls
+`requireEnv("NEXT_PUBLIC_SUPABASE_URL")` and `requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")` -
+each throws a hard `Error` if its variable is missing. **Diagnosis**: one or both of those two
+env vars isn't actually reaching the deployed Edge Middleware runtime, even though (per your
+earlier message) they were set in the Vercel dashboard. `NEXT_PUBLIC_SITE_URL` is not used by
+`proxy.ts` at all (only by the auth Server Actions building email links), so it's specifically
+one of the two Supabase vars.
+
+**Not fixed by this agent** - no Vercel dashboard/API access exists in this environment to
+inspect or correct env var scoping (this is exactly the same human-owned boundary as project
+creation in §1/§6). Worth checking directly in **Settings → Environment Variables**:
+- Both `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` are present for whichever
+  environment scope this deployment belongs to (Production vs Preview) - a var added only under
+  "Production" won't be visible to a Preview deployment's functions, and vice versa.
+- Both are scoped to **Runtime**, not Build-time only - `proxy.ts` reads `process.env` live on
+  every Edge Middleware invocation, not from values baked in at build time the way client-bundle
+  `NEXT_PUBLIC_*` references are.
+- No typo in either variable name (a misspelled name is indistinguishable from "not set" to
+  `requireEnv`).
+- After any correction, a **new deployment** may be needed - Vercel's env var changes don't
+  always retroactively apply to an already-built deployment's running functions.
+
+Every other check this section describes (`proxy.ts` redirect behavior, public page content,
+env-leakage in delivered HTML) is blocked behind this 500 - there's no successful response yet
+to inspect for any of them. Re-run the same curl checks once the env var issue is corrected;
+they're one command away, not blocked on anything else.
+
+**A smaller environment quirk surfaced along the way, worth recording**: this agent's own Bash
+shell did not see the newly-set `VERCEL_AUTOMATION_BYPASS_SECRET` even after confirming (via
+PowerShell's `[Environment]::GetEnvironmentVariable(..., 'User')`, which reads the registry
+directly) that it was actually set. A long-running shell process only has the environment it
+inherited at its own startup - setting a new User/Machine env var afterward doesn't retroactively
+appear in already-running processes, only in new ones. PowerShell tool calls in this session
+happen to start fresh each time (so they saw it immediately); this session's Bash tool calls do
+not. If a future "I set an env var, please check it" request seems to fail even though the
+value is confirmed in the registry/dashboard, try reading it through a different tool/process
+before concluding it's genuinely unset.
 
 ## 7. Migration discipline going forward (starts now, permanently)
 
@@ -312,20 +354,34 @@ other people/deployments depend on.
 A green run at `https://github.com/Vishwas2018/taxops/actions` (both `quality` and `e2e` jobs) is
 part of Day 10 being done, not just "the workflow file exists."
 
-**If a future job needs the deployed staging URL** (e.g. a post-deploy smoke-check job), wire the
-Deployment Protection bypass (§6) the same way - a secret referenced by name, never its value:
+**CI does not exercise the deployed URL - deploy checks are manual for v1, by explicit
+decision, not an oversight.** `VERCEL_AUTOMATION_BYPASS_SECRET` is set as a GitHub Actions secret
+(confirmed via `gh secret list`, 2026-07-13) but no workflow job references it. Reasons this is
+staying manual rather than wired in now:
+
+- The `e2e` job's whole design (Day 9) is testing against a disposable, ephemeral local Supabase
+  instance the CI runner starts and tears down itself - adding a second, unrelated concern
+  (does the *deployed* app respond) to that job would conflate "did the app's own logic break"
+  with "is today's Vercel deployment currently healthy," which are different questions with
+  different remediation paths.
+- As of 2026-07-13 the deployed URL is returning `500` on every route (§6's finding) - wiring an
+  automated check against it right now would make CI red for an infrastructure/env-var reason
+  unrelated to code changes, which is exactly the kind of flaky-for-the-wrong-reason signal a CI
+  gate shouldn't have.
+
+If this project later wants an automated post-deploy check, the mechanism is the same
+bypass-header pattern used manually above, referenced by secret name only:
 
 ```yaml
 - name: Check staging deploy responds
   run: |
     curl -sf -H "x-vercel-protection-bypass: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}" \
       https://<staging-url>/tips
-  env:
-    VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 ```
 
-Set via `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET` or **Settings → Secrets and variables →
-Actions** on the GitHub repo - not yet set as of 2026-07-13 (see §6's status note).
+(no separate `env:` block needed - `${{ secrets.* }}` interpolates directly into `run:` steps)
+- revisit only once the deployment itself is confirmed healthy, so a new automated check starts
+green rather than red.
 
 ## 9. Staging smoke test (manual, in a browser)
 
