@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata: Metadata = { title: "Calculators — TaxOps" };
 
-const CALCULATORS = [
+export const CALCULATORS = [
   {
     href: "/calculators/contractor-take-home",
     title: "Contractor take-home pay",

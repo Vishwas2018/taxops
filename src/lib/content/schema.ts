@@ -9,6 +9,13 @@ export const ARTICLE_CATEGORIES = [
 
 export type ArticleCategory = (typeof ARTICLE_CATEGORIES)[number];
 
+export const CATEGORY_LABELS: Record<ArticleCategory, string> = {
+  "contractor-expenses": "Contractor expenses",
+  "property-deductions": "Property deductions",
+  superannuation: "Superannuation",
+  "wealth-preservation": "Wealth preservation",
+};
+
 const MAX_REVIEW_AGE_MONTHS = 12;
 
 /**

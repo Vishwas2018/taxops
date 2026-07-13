@@ -43,6 +43,30 @@ describe("PropertyCashFlowCalculator", () => {
     expect(screen.getByText(/FY2025-26/)).toBeInTheDocument();
   });
 
+  it("prefills the marginal rate from a profile-derived suggestion, labeled and still editable", async () => {
+    const user = userEvent.setup();
+    render(
+      <PropertyCashFlowCalculator suggestedMarginalRate={0.37} incomeBandLabel="$100k–$190k" />,
+    );
+
+    const select = screen.getByLabelText(/your marginal tax rate/i) as HTMLSelectElement;
+    expect(select.value).toBe("0.37");
+    expect(screen.getByText(/defaulted from your tax profile/i)).toHaveTextContent(
+      "$100k–$190k",
+    );
+
+    // Still a normal editable default, not a locked value.
+    await user.selectOptions(select, "0.45");
+    expect(select.value).toBe("0.45");
+  });
+
+  it("falls back to the static default marginal rate when no profile suggestion is given", () => {
+    render(<PropertyCashFlowCalculator />);
+    const select = screen.getByLabelText(/your marginal tax rate/i) as HTMLSelectElement;
+    expect(select.value).toBe("0.3");
+    expect(screen.queryByText(/defaulted from your tax profile/i)).not.toBeInTheDocument();
+  });
+
   it("regression: a full-pipeline exact-zero scenario never shows -$0", async () => {
     const user = userEvent.setup();
     render(<PropertyCashFlowCalculator />);

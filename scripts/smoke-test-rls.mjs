@@ -1,8 +1,12 @@
-// One-off local-dev smoke test for Row Level Security. Not part of the automated test
-// suite (needs a running `supabase start` stack); run manually after schema changes touch
-// RLS policies. Creates a throwaway second user via the service-role client, then verifies:
+// One-off local-dev smoke test for Row Level Security (+ Day 7's partial-upsert mechanism).
+// Not part of the automated test suite (needs a running `supabase start` stack); run manually
+// after schema changes touch RLS policies. Creates a throwaway second user via the
+// service-role client, then verifies:
 //   1. An anon (unauthenticated) client reads zero rows from `profiles`.
 //   2. An authenticated client reads exactly its own `profiles` row, never another user's.
+//   3. A partial upsert (`{ id, oneColumn }`) updates only that column, leaving the rest of
+//      the demo user's row untouched - the mechanism the Guided Tax Profile's section-edit
+//      feature relies on.
 // Exits non-zero on any assertion failure.
 
 import { createClient } from "@supabase/supabase-js";
@@ -52,7 +56,7 @@ const secondUserId = created.user.id;
 
 const { error: profileErr } = await admin.from("profiles").insert({
   id: secondUserId,
-  employment_type: "payg",
+  work_arrangement: "payg_employee",
 });
 if (profileErr) {
   console.error("Could not seed throwaway user's profile:", profileErr.message);
@@ -98,6 +102,39 @@ try {
     (directRead?.length ?? -1) === 0,
     "authenticated client cannot read the second user's row by direct id filter either",
   );
+
+  console.log(
+    "\n3. A partial upsert (Day 7's section-edit mechanism) only touches the given column:",
+  );
+  const { data: before } = await authed
+    .from("profiles")
+    .select("work_arrangement, household_income_band")
+    .eq("id", DEMO_USER_ID)
+    .single();
+  const { error: partialUpsertErr } = await authed
+    .from("profiles")
+    .upsert({ id: DEMO_USER_ID, household_income_band: "under_100k" }, { onConflict: "id" });
+  assert(!partialUpsertErr, `partial upsert did not error (${partialUpsertErr?.message ?? "ok"})`);
+  const { data: after } = await authed
+    .from("profiles")
+    .select("work_arrangement, household_income_band")
+    .eq("id", DEMO_USER_ID)
+    .single();
+  assert(
+    after?.household_income_band === "under_100k",
+    `targeted column was updated (household_income_band is now ${after?.household_income_band})`,
+  );
+  assert(
+    after?.work_arrangement === before?.work_arrangement,
+    `untouched column was left alone (work_arrangement still ${after?.work_arrangement})`,
+  );
+  // Restore the seed value so re-running this script stays idempotent.
+  await authed
+    .from("profiles")
+    .upsert(
+      { id: DEMO_USER_ID, household_income_band: before?.household_income_band },
+      { onConflict: "id" },
+    );
 } finally {
   console.log("\nCleaning up throwaway user...");
   await admin.auth.admin.deleteUser(secondUserId);

@@ -39,7 +39,16 @@ const MARGINAL_RATE_OPTIONS = fy2025_26.incomeTaxBrackets.value.map((bracket) =>
       : `${Math.round(bracket.rate * 100)}% ($${bracket.min.toLocaleString()}-$${bracket.max.toLocaleString()})`,
 }));
 
-export function PropertyCashFlowCalculator() {
+export function PropertyCashFlowCalculator({
+  suggestedMarginalRate = null,
+  incomeBandLabel = null,
+}: {
+  /** From the user's tax profile (household income band -> a representative bracket via
+   * `marginalRateAt` - never a separately inlined rate). `null` when there's no profile or no
+   * income band answered yet, in which case the form falls back to its own static default. */
+  suggestedMarginalRate?: number | null;
+  incomeBandLabel?: string | null;
+}) {
   const [result, setResult] = useState<PropertyCashFlowResult | null>(null);
 
   const {
@@ -48,7 +57,10 @@ export function PropertyCashFlowCalculator() {
     formState: { errors },
   } = useForm<PropertyCashFlowFormRawInput, unknown, PropertyCashFlowFormInput>({
     resolver: zodResolver(propertyCashFlowFormSchema),
-    defaultValues: DEFAULT_VALUES,
+    defaultValues: {
+      ...DEFAULT_VALUES,
+      ...(suggestedMarginalRate !== null ? { marginalTaxRate: suggestedMarginalRate } : {}),
+    },
   });
 
   function onSubmit(values: PropertyCashFlowFormInput) {
@@ -145,6 +157,11 @@ export function PropertyCashFlowCalculator() {
         <FormField
           id="marginalTaxRate"
           label="Your marginal tax rate"
+          description={
+            suggestedMarginalRate !== null
+              ? `Defaulted from your tax profile (household income: ${incomeBandLabel}) - edit if this doesn't match your individual marginal rate.`
+              : undefined
+          }
           error={errors.marginalTaxRate?.message}
         >
           <select

@@ -60,23 +60,25 @@ values (
 )
 on conflict do nothing;
 
+-- Matches CLAUDE.md's primary persona: dual-profile PAYG contractor who also holds an ABN and
+-- an investment property, household income $400k-600k (above the top 250k+ band).
 insert into public.profiles (
   id,
-  employment_type,
-  business_structure,
-  investment_property_count,
-  super_contribution_habit,
-  expense_categories,
+  work_arrangement,
+  has_abn,
+  investment_property_band,
+  super_engagement,
+  household_income_band,
   other_income_sources
 )
 values (
   '11111111-1111-1111-1111-111111111111',
-  'both',
-  'sole_trader',
-  1,
-  'salary_sacrifice',
-  array['home_office', 'vehicle', 'tools_equipment'],
-  array['dividends']
+  'mix',
+  true,
+  'one',
+  'making_concessional_contributions',
+  '250k_plus',
+  array['dividends']::other_income_source[]
 )
 on conflict (id) do nothing;
 

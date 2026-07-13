@@ -742,6 +742,167 @@ is preserved verbatim at `docs/design-theme-source.md` for provenance.
   code is correct and wired together; it does not verify the result *looks* right. Flagging this
   as the one thing still owed before treating this reskin as done, not just built.
 
+## Day 7 — Guided Tax Profile Interview (2026-07-13)
+
+### Ground truth read first, and a real schema-design finding
+
+Read the Day 1 `profiles` migration and Day 2 RLS setup before designing anything, per
+instruction. Grepped `src/` for any application code touching the existing profile columns
+(`employment_type`, `business_structure`, `investment_property_count`,
+`super_contribution_habit`, `expense_categories`, `other_income_sources`) - **zero hits**. The
+Day 1 table was a placeholder scaffold (matching CLAUDE.md's module-1 description verbatim) that
+nothing had built against yet, which made this a schema *correction*, not a purely additive
+migration:
+
+- `employment_type` was `NOT NULL` and could only be `payg`/`abn`/`both` - both violate this
+  day's principles (full skippability; distinguishing PAYG employee from PAYG contractor).
+  Dropped from `profiles`; the `employment_type` *type* itself is kept since
+  `checklists.profile_type` still uses it.
+- `business_structure` and `super_contribution_habit` (columns *and* their enum types) dropped
+  entirely - no consumer today (Privacy rule: no speculative columns). `super_engagement`
+  (this day) replaces `super_contribution_habit`'s role with different wording/values.
+- `expense_categories` dropped - no consumer wired today either (checklist item selection is a
+  future day). Re-added later with its own migration once a real consumer exists.
+- `investment_property_count` (exact `smallint`) replaced by `investment_property_band` (banded
+  enum: 0/1/2-3/4+) - the brief's own privacy-minimizing principle explicitly calls for banded
+  ranges, even though a small count alone wouldn't have been too sensitive on its own.
+- `other_income_sources` changed from free-form `text[]` to a real `other_income_source[]` enum
+  array - matches the Day 1 migration's own stated intent ("the DB enforces valid values via
+  enums/arrays") for the first time.
+
+Every new column is nullable, no defaults except `other_income_sources` (`'{}'::other_income_source[]`,
+matching its prior default) - `null` means "not answered", distinct from any answered value,
+which is what makes profile completeness a derived count rather than a gate.
+
+**Real migration bug hit and fixed**: `alter column ... type other_income_source[] using ...`
+failed with `default for column "other_income_sources" cannot be cast automatically` - Postgres
+won't auto-cast a column's *default expression* during a type change even with an explicit
+`USING` clause for existing row data. Fixed by dropping the default, changing the type, then
+re-adding the default with an explicit cast (`'{}'::other_income_source[]`).
+
+### Verified against running Postgres, same as Day 2
+
+Docker + `supabase start` were already available in this environment. `supabase db reset`
+applied both migrations and the updated seed cleanly. Re-seeded the demo user (CLAUDE.md's
+stated persona: PAYG+ABN mix, one investment property, $400-600k household income) with
+`work_arrangement: 'mix'`, `has_abn: true`, `investment_property_band: 'one'`,
+`super_engagement: 'making_concessional_contributions'`, `household_income_band: '250k_plus'`
+(above the top band, matching the persona) - confirmed via direct `psql`/`docker exec` query,
+not just "the reset didn't error."
+
+Extended `scripts/smoke-test-rls.mjs` (also fixed its own now-broken `employment_type` insert
+in the throwaway-user setup) with a third assertion beyond the existing anon/cross-user checks:
+a partial upsert (`{ id, householdIncomeBand }`) updates only that column on the demo user's
+real row and leaves every other column untouched, then restores the seed value for
+idempotency. This is the exact mechanism the section-edit feature (below) depends on, verified
+against live Postgres rather than assumed from Supabase's documented upsert semantics. **All 9
+assertions passed** (2 anon, 4 authenticated-cross-user, 3 partial-upsert).
+
+### Built
+
+- **`src/lib/validation/tax-profile.ts`**: five Zod enums mirroring the Postgres enums exactly,
+  `taxProfileSchema` (every field `.nullable().optional()`), and `TAX_PROFILE_QUESTION_GROUPS` -
+  a single source of truth (key/title/description/type/options) driving the wizard, the summary
+  view, and the review step, so option labels are never duplicated. A partial payload (e.g.
+  `{ hasAbn: true }`) is already valid against this schema with no separate `.partial()` needed,
+  since every field starts optional - this is what lets one server action cover both a full
+  wizard submission and a single-section edit.
+- **`src/lib/tax-profile/derived.ts`** (pure, no I/O - same discipline as `src/lib/calculators/`):
+  - `computeProfileCompleteness` - counts answered groups (an empty `otherIncomeSources` array
+    or an explicit `null` both count as unanswered; `false`/`"zero"` count as answered).
+  - `getRelevantTipCategories` - a fixed lookup table keyed only on `workArrangement` +
+    `investmentPropertyBand` (the two fields the brief named for this consumer), not a scoring
+    engine: contractor-like arrangement -> contractor-expenses; any work arrangement answered ->
+    superannuation; non-zero property band -> property-deductions; 2-3 or 4+ properties ->
+    wealth-preservation also.
+  - `suggestMarginalRateForIncomeBand` - looks up a representative income per household-income
+    band (documented as a best-effort default, not a precise derivation - household income isn't
+    the same figure as an individual's taxable income) and feeds it to the **existing**
+    `marginalRateAt` from `src/lib/calculators/income-tax.ts` rather than inlining a new rate
+    table - "never inline a tax rate" holds even for a UI-prefill helper, not just the
+    calculator engines.
+- **`src/lib/tax-profile/data.ts`**: `getTaxProfile` (row -> camelCase `TaxProfileInput`,
+  `null` if no row yet) and `toProfileRow` (only maps keys actually present on the input object
+  to their DB columns - the mechanism that makes partial saves partial).
+- **`src/app/(app)/profile/actions.ts`**: `saveTaxProfileSectionAction` - re-validates with the
+  same Zod schema server-side (Privacy rule: never trust client validation alone), checks
+  `auth.getUser()` itself rather than relying on RLS alone to silently reject an unauthenticated
+  write (RLS is the backstop, not the only gate - directly testable, unlike a silent RLS
+  failure), then upserts. One action covers both the full-wizard save and every single-section
+  edit - they're the same partial-input shape.
+- **Wizard** (`src/components/tax-profile/tax-profile-wizard.tsx`): one `QuestionGroupControl`
+  per step (radio group for single/boolean, checkbox list for multi - both using the
+  enclosing-label pattern from Day 4, not `<Label htmlFor>`), a progress bar + `aria-live="polite"`
+  step announcement, Back (disabled at step 0) / Next, focus moved to each step's heading on
+  change (keyboard/screen-reader users land somewhere meaningful, not stranded), a
+  review-and-confirm step with per-group Edit-jump-back, and a completion screen rendering
+  `<Disclaimer variant="inline" />` alongside copy stating the profile organizes content only
+  and never generates advice. No per-step validation gate exists to fight through, since every
+  field is skippable by design - "Next" always works.
+- **Summary/edit view** (`tax-profile-summary.tsx` + `tax-profile-section-editor.tsx`): once any
+  answer exists, `/profile` shows a read view with a per-row "Edit" button that opens an inline
+  single-field editor (same `QuestionGroupControl`, same server action, just one key) - directly
+  satisfies "editing individual sections later without redoing the wizard." A "Redo the full
+  interview" escape hatch reopens the wizard prefilled with current answers rather than blank.
+- **`/profile`** (`page.tsx`, now a Server Component): fetches the profile, renders the wizard
+  directly for a brand-new user (zero answers) or the summary view otherwise.
+- **Consumers wired**:
+  - **Tips** (`/tips`, now async): public route, so `getUser()` may return `null` - handled,
+    not treated as an error. When a signed-in user has a profile with any relevant category, a
+    "Relevant to you" section renders above the full category listing. Moved `CATEGORY_LABELS`
+    out of the page into `src/lib/content/schema.ts` so it's not duplicated between this page
+    and the dashboard.
+  - **Property cash flow calculator**: the page (Server Component) computes a suggested marginal
+    rate from the profile's household income band and passes it + the band's label into the
+    (client) calculator as props; the form's `marginalTaxRate` `<select>` defaults to it and is
+    labelled "Defaulted from your tax profile (household income: …) - edit if this doesn't
+    match your individual marginal rate" - still a completely normal, editable default, not a
+    locked value. Falls back to the calculator's own static default (30%) when there's no
+    profile or no income band answered.
+  - **Dashboard** (`page.tsx`, was a Day 2 stub): profile-completeness bar + link to `/profile`,
+    the three calculator cards (reused from `/calculators` via an exported `CALCULATORS` const
+    rather than a duplicated list) with a "From your profile" pill on the contractor take-home
+    card when the work arrangement is contractor-like, and a "Relevant tips for you" row of
+    category links (deep-linking to `/tips#category-<slug>`, since `/tips` already anchors each
+    category section by id). Still no saved-scenarios, as instructed.
+
+### Deviations
+
+- **Dropped three existing columns and two enum types** (`business_structure`,
+  `super_contribution_habit` + its type, `expense_categories`) rather than leaving them dormant.
+  Justified above under "ground truth read first" - zero consumers, no defined consumer in this
+  day's brief either, and CLAUDE.md's own Privacy rule 5 is explicit about not keeping
+  speculative columns. Reversible via a future migration if a consumer for any of them shows up.
+- **`hasAbn` is a genuinely separate question from `workArrangement`**, even though
+  `workArrangement: 'abn_sole_trader'` already implies an ABN - kept both because the brief
+  listed them as two distinct groups, and a real scenario (e.g. a PAYG employee with a small
+  ABN side gig) makes them non-redundant in practice.
+- **`getRelevantTipCategories` deliberately ignores `superEngagement` and `householdIncomeBand`**
+  even though richer signals were available, to match the brief's literal instruction ("mapped
+  from work arrangement + property count") rather than quietly expanding the lookup table's
+  inputs.
+- **Household-income-band -> marginal-rate mapping is a labelled best-effort default, not a
+  precise figure** - household income (often a combined/broader figure) isn't the same number as
+  an individual's taxable income, so a representative-point-per-band lookup against the real
+  bracket table is the honest amount of precision here; documented in `derived.ts` and surfaced
+  to the user via the "edit if this doesn't match" label rather than presented as computed fact.
+
+### Verification
+
+- Full quality loop green: `typecheck && lint && validate:content && test && build`. 184 tests
+  total (55 new: 12 schema, 14 derived-logic, 5 server-action, 6 wizard incl. real keyboard-only
+  navigation via `userEvent.tab()`/`keyboard()` - not just clicks, 4 summary/section-edit, 6
+  tips-page incl. the new relevance section, 2 calculator-prefill, plus the extended live-DB
+  smoke test run separately, not part of `npm test`).
+- **Migration + RLS verified against a real running Postgres** (Docker + `supabase start`, both
+  available in this environment) - see the ground-truth section above. Not simulated.
+- **Gap, same as every prior day**: no browser/Playwright tool in this environment, so the
+  wizard's actual visual appearance, hover/focus states, and a real authenticated click-through
+  of `/profile` -> `/dashboard` -> a calculator with a live prefill were not seen in a browser.
+  The RTL tests exercise the real component tree, real Zod validation, and (via the smoke test)
+  real Postgres writes - the strongest verification available here - but that is not the same as
+  having looked at it.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off
