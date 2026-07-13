@@ -101,50 +101,40 @@ SMOKE_TEST_SERVICE_ROLE_KEY="<service-role key>" \
 node --no-warnings scripts/smoke-test-rls.mjs
 ```
 
-All 20 assertions (anon rejection, cross-user read/write/delete denial, partial-upsert
-isolation, on both `profiles` and the Day 8 checklist tables) should pass identically to the
-local run. **The service-role key only ever lives in your local shell environment for this one
-command** — it is never written to a file in this repo, never set as a Vercel env var, and never
-shipped to the browser.
+All 31 assertions (anon rejection at both the RLS and privilege layers, cross-user read/write/
+delete denial, partial-upsert isolation, on `profiles`, the Day 8 checklist tables, and
+`saved_articles`/`saved_scenarios`) should pass identically to the local run. **The service-role
+key only ever lives in your local shell environment for this one command** — it is never written
+to a file in this repo, never set as a Vercel env var, and never shipped to the browser.
 
-**Real finding, reported not fixed (2026-07-13)**: against `taxops-staging`, 19/20 assertions
-passed — the one failure was "anon select was rejected (permission denied)", which instead
-returned zero rows with **no error**. Investigated with `supabase db query --linked` (read-only,
-no dashboard needed):
+**Finding from 2026-07-13, now fixed**: the first staging run of this script was 19/20 - "anon
+select was rejected (permission denied)" returned zero rows with **no error** instead. Root cause
+(investigated with `supabase db query --linked`, read-only, no dashboard needed): the hosted
+project has a schema-level `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO anon,
+authenticated, service_role` set for the `postgres` role in `public` - a platform bootstrap
+default the local CLI's Docker image doesn't replicate. Every `CREATE TABLE` in every migration
+silently inherited this, regardless of what the migration itself explicitly granted. **Not a
+data exposure at the time** - RLS was enabled on every table and correctly scoped every
+authenticated access; `anon` could issue the SQL but had no `auth.uid()`, so RLS filtered every
+row to the same practical zero-rows outcome as a hard rejection, just via a different mechanism.
+Still a real defense-in-depth gap (a future table added without RLS enabled would have had zero
+protection instead of one layer) - see PROGRESS.md's Day 10 entries for the full investigation.
 
-```sql
-select grantee, table_name, privilege_type from information_schema.role_table_grants
-where table_schema='public' and grantee='anon';
-```
-
-confirmed `anon` holds full `SELECT/INSERT/UPDATE/DELETE/...` grants on **all five** `public`
-tables on the hosted project - not the "`anon` gets nothing" state Day 2's migration explicitly
-intended and that holds true locally. Root cause, confirmed via `pg_default_acl`: the hosted
-project has schema-level `ALTER DEFAULT PRIVILEGES ... GRANT ALL ON TABLES TO anon,
-authenticated, service_role` set for both the `postgres` and `supabase_admin` roles in the
-`public` schema - a platform bootstrap default the local CLI's Docker image doesn't replicate
-(consistent with Day 2's own note that "this Supabase version no longer auto-exposes new
-tables... without explicit GRANTs," which turns out to describe *local* behavior only). Every
-`CREATE TABLE` in every migration silently inherits this default, regardless of what the
-migration itself explicitly grants.
-
-**Not a data exposure** - confirmed RLS is enabled on all five tables
-(`pg_class.relrowsecurity = true`, checked directly) and every authenticated-access assertion in
-the smoke test passed correctly (cross-user isolation, partial-upsert scoping, etc.). `anon` can
-issue the SQL, but has no `auth.uid()`, so RLS policies filter every row - the practical result
-is identical to a hard rejection (zero rows either way), just via a different mechanism than
-intended. Still worth fixing for defense-in-depth (a future table added without RLS enabled
-would have zero protection instead of one layer), but it's a grants-hardening migration against
-a real hosted database with real auth users - **not pushed without sign-off**. Proposed fix,
-for review before applying:
-
-```sql
-revoke all on all tables in schema public from anon;
-alter default privileges in schema public revoke all on tables from anon;
-```
-
-(`authenticated`/`service_role` keep their default-privilege grants - both already have
-equivalent or broader explicit grants by design, so this only removes the *unintended* one.)
+**Fixed by `supabase/migrations/20260713030000_harden_data_api_grants.sql`**: revokes every
+grant on all five tables from `anon`/`authenticated`/`service_role`, then re-grants exactly the
+explicit per-table privileges this project has always declared (`select, insert, update, delete`
+for `authenticated`; `all` for `service_role`; nothing for `anon`), and adds
+`alter default privileges in schema public revoke all on tables from anon, authenticated,
+service_role` so the same drift can't reappear for any future table created by a migration
+(explicit per-table grants are now mandatory going forward, not optional - matching the
+convention every migration already followed). Applied locally (`supabase db reset`) and pushed
+to staging (`supabase db push`) on 2026-07-13; `information_schema.role_table_grants` confirms
+`anon` now has zero rows on any `public` table on both, and `authenticated` lost the incidental
+extra `REFERENCES`/`TRIGGER`/`TRUNCATE` privileges the same default had leaked to it (tightened
+to exactly `SELECT`/`INSERT`/`UPDATE`/`DELETE`, matching intent). `scripts/smoke-test-rls.mjs`
+section 5 now pins this explicitly - `anon` select *and* insert on every table must fail with
+Postgres error `42501` (`insufficient_privilege`), not just return an empty/RLS-filtered result -
+so this can't silently regress again.
 
 ## 5. Auth config for hosted (staging behaves like production)
 
@@ -248,29 +238,33 @@ won't come back correctly — expected for one-off previews, not a bug.
    convention and won't reach the browser bundle regardless, but there shouldn't be anything
    else here to leak in the first place per this project's minimal env surface.
 
-**Blocker found 2026-07-13, unresolved**: every URL tried for this project
-(`taxops-<hash>-vishwas2018s-projects.vercel.app` and the hashless
-`taxops-vishwas2018s-projects.vercel.app` alias; `taxops.vercel.app` 404s, unclaimed) redirects
-with `302` to `vercel.com/sso-api?...` — **Vercel's own Deployment Protection / Vercel
-Authentication SSO gate**, not this app's `proxy.ts`. That's a platform-level setting
-(**Settings → Deployment Protection** in the Vercel dashboard), on by default for
-Preview deployments on most plans and possible to extend to Production too. Nothing in this
-doc's step 4/5 checks (build log, `/dashboard` redirect behavior, env var leakage) could be
-performed against a URL that never reaches the app at all — every curl hit Vercel's edge, not
-Next.js. **Needs one of, from the dashboard** (stopping here rather than guessing which you'd
-prefer):
-- Turn Deployment Protection off for this project (simplest, fine for a disposable staging
-  project with no sensitive data), or
-- If keeping it on: generate a **Protection Bypass for Automation** secret (Settings →
-  Deployment Protection) and share *that it's set*, not its value — it can be passed as an
-  `x-vercel-protection-bypass` header or `?x-vercel-set-bypass-cookie=...` query param for
-  future automated checks, or
-- Confirm whether Production specifically has protection disabled and share the intended
-  stable production URL if it differs from what's above.
+**Deployment Protection stays ON** (confirmed decision, 2026-07-13) - every URL for this project
+redirects with `302` to `vercel.com/sso-api?...` (Vercel's own SSO gate, not this app's
+`proxy.ts`) unless the request carries a valid bypass credential. Automated checks (this doc's
+build-success/`proxy.ts`/env-leakage checks, and any future CI job that needs the deployed URL)
+authenticate past it with the **Protection Bypass for Automation** header:
 
-Until this is resolved, this section's own build-success/`proxy.ts`/env-leakage checks (steps
-4-5 above) and §9's human smoke test are both blocked — not skipped, blocked, and flagged rather
-than worked around.
+```bash
+curl -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+  https://<deployment-url>/some-path
+```
+
+(`?x-vercel-set-bypass-cookie=true` as a query param on the first request also works, for a
+browser session that needs to stay past the gate across multiple page loads - not needed for
+one-off curl checks.)
+
+The secret itself is generated once in **Settings → Deployment Protection → Protection Bypass
+for Automation** and referenced by name everywhere after - `VERCEL_AUTOMATION_BYPASS_SECRET`,
+never its value, in this doc, in CI (§8), or in any command's visible output/logs.
+
+**Status 2026-07-13**: not yet reachable from this environment or CI to actually run the checks
+- confirmed absent from this machine's User/Machine/Process environment scopes
+(`[Environment]::GetEnvironmentVariable(...)` in PowerShell all return unset) and absent from
+the repo's GitHub Actions secrets (`gh secret list` shows only `CI_SUPABASE_SERVICE_ROLE_KEY`).
+Build-success/`proxy.ts`/env-leakage checks against the deployed URL and §9's human smoke test
+both still need this resolved - flagged rather than worked around. Once the secret is actually
+set somewhere this agent can read it (or `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET` is run
+so a future CI job can use it), the checks above are ready to run immediately.
 
 ## 7. Migration discipline going forward (starts now, permanently)
 
@@ -317,6 +311,21 @@ other people/deployments depend on.
 
 A green run at `https://github.com/Vishwas2018/taxops/actions` (both `quality` and `e2e` jobs) is
 part of Day 10 being done, not just "the workflow file exists."
+
+**If a future job needs the deployed staging URL** (e.g. a post-deploy smoke-check job), wire the
+Deployment Protection bypass (§6) the same way - a secret referenced by name, never its value:
+
+```yaml
+- name: Check staging deploy responds
+  run: |
+    curl -sf -H "x-vercel-protection-bypass: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}" \
+      https://<staging-url>/tips
+  env:
+    VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+```
+
+Set via `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET` or **Settings → Secrets and variables →
+Actions** on the GitHub repo - not yet set as of 2026-07-13 (see §6's status note).
 
 ## 9. Staging smoke test (manual, in a browser)
 

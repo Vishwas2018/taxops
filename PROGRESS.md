@@ -1310,6 +1310,126 @@ that URL if it differs from what's above.
   four need the Deployment Protection question resolved first. Stated plainly rather than
   assumed passing.
 
+## Day 10 continuation — Grants Hardening + Protected-Deploy Verification (2026-07-13)
+
+### The 19/20, confirmed before anything else
+
+Per instruction, checked first: the failing assertion in the prior entry's smoke-test run
+("anon select was rejected (permission denied)", which instead returned zero rows with no
+error) is exactly the grants finding already written up above, not a separate bug. No other
+investigation needed there - moved straight to the fix.
+
+### Grants hardening: `supabase/migrations/20260713030000_harden_data_api_grants.sql`
+
+Revokes every privilege on all five `public` tables from `anon`/`authenticated`/`service_role`,
+then re-grants exactly the explicit per-table privileges this project has always declared
+(`select, insert, update, delete` for `authenticated`; `all` for `service_role`; nothing for
+`anon`), then `alter default privileges in schema public revoke all on tables from anon,
+authenticated, service_role` so no future migration's `create table` can silently inherit the
+platform default again - explicit per-table grants are now mandatory going forward, matching the
+convention every migration already followed anyway.
+
+- **Applied locally**: `supabase db reset` (see the container-recovery detour below) - all four
+  migrations applied cleanly.
+- **Applied to staging**: `supabase db push` - applied cleanly; `supabase migration list
+  --linked` confirms all four match, no drift.
+- **Verified directly, not assumed**: re-ran `information_schema.role_table_grants` against
+  staging post-migration - `anon` now has **zero rows** on any `public` table (was 35 rows: 7
+  privilege types × 5 tables). Bonus tightening caught in the same query: `authenticated` lost
+  the incidental `REFERENCES`/`TRIGGER`/`TRUNCATE` privileges the same platform default had
+  leaked to it, now exactly `SELECT`/`INSERT`/`UPDATE`/`DELETE` as intended. `service_role`
+  unchanged (`all`, as intended).
+
+### `scripts/smoke-test-rls.mjs` extended: section 5, privilege-layer pins
+
+Added 10 new assertions (2 per table × 5 tables): `anon` `select` **and** `insert` on every
+`public` table must fail with Postgres error code `42501` (`insufficient_privilege`) specifically
+- not just return an empty/RLS-filtered result, which would also happen if RLS alone were doing
+the work with grants still wide open (the exact gap this migration closes). Pins the hardening
+itself, not just its side effect.
+
+**Result: 31/31 on both local and staging** (was 20/20 local, 19/20 staging before today).
+
+### Real detour: local Supabase broke mid-session, root-caused and fixed
+
+`supabase db reset` (needed to apply the new migration locally) failed pulling a newer Postgres
+image tag (`17.6.1.141`) from the same flaky CloudFront path Day 2 and Day 9 both already hit,
+and left `supabase_db_taxops` **removed entirely** mid-failure - `supabase status` came back
+with "No such container." `supabase stop` (data safely preserved in the Docker volume) then
+`supabase start` recovered it, but hit the *same* CloudFront flakiness again, this time
+pulling `storage-api:v1.65.1`, repeatedly, across multiple retries.
+
+**Root cause of why storage-api needed pulling at all**: nothing in `src/` uses Supabase
+Storage (grepped, zero hits - matches v1 scope, no file-upload features). Disabled it in
+`supabase/config.toml` (`[storage] enabled = false`), the same precedent Day 2 set for
+`studio`/`edge_runtime` hitting this identical issue. Local stack started cleanly right after -
+one fewer image in the pull path, one fewer thing this flaky network path can break.
+
+**Second, smaller flake found and root-caused in the same session**: `npm run test:coverage`
+intermittently failed one of `validate-content-script.test.ts`'s two subprocess-spawning tests
+(`Test timed out in 5000ms` on a plain `spawnSync("node", ...)` call) - reproduced it running
+*in isolation* (no concurrent Playwright/dev-server this time, unlike Day 9's version of this
+same flake), which pointed at something more persistent than "another test process competing."
+`docker ps` showed `supabase_vector_taxops` (a log-shipping sidecar, not needed for anything this
+project does) stuck crash-looping (`Restarting (0) 38 seconds ago`). Stopped it directly
+(`docker stop supabase_vector_taxops`); the same test went from ~29s/flaky to 4.3s/clean
+immediately after, and the full suite passed clean right after that. Not fixed in
+`supabase/config.toml` (unlike storage - `vector` has legitimate local-observability value and
+its own restart loop looks like a separate, narrower Docker Desktop networking issue on this
+machine rather than the same CloudFront pull failures), but worth knowing: **if this exact
+"subprocess test times out, nothing else changed" symptom recurs, check `docker ps` for a
+crash-looping container before assuming it's test flakiness.**
+
+### Vercel Deployment Protection: still open, not this agent's blocker to clear
+
+Confirmed decision: Deployment Protection stays ON. `VERCEL_AUTOMATION_BYPASS_SECRET` was
+reported set "in your environment and GitHub Actions secrets" - checked both and it's in
+neither:
+
+- This machine's User/Machine/Process environment scopes all report it unset
+  (`[Environment]::GetEnvironmentVariable(...)` in PowerShell, and `cmd /c echo
+  %VERCEL_AUTOMATION_BYPASS_SECRET%` prints nothing).
+- `gh secret list` on the repo shows only `CI_SUPABASE_SERVICE_ROLE_KEY` - the Vercel bypass
+  secret isn't there either.
+
+Per this task's own "never echo it, never write it to any file or log" instruction alongside
+this absence, the only honest move is to report it, not guess a value or skip the check quietly.
+**Deploy verification (build success, `proxy.ts` behavior on the deployed edge network,
+env-leakage check on the delivered bundle) and the human's §9 browser smoke test are both still
+blocked on this** - documented in `docs/deployment.md` §6 with the exact bypass-header mechanism
+(`x-vercel-protection-bypass`) ready to use the moment the secret is actually reachable, plus a
+CI snippet in §8 referencing it by name for any future deploy-check job. Nothing was worked
+around; nothing was assumed to have passed.
+
+### Deviations
+
+- **`supabase/config.toml`'s `[storage]` disabled** - same category of change as Day 2's
+  `studio`/`edge_runtime` disables (flaky CloudFront pulls, zero application consumers), not a
+  scope change; reversible.
+- **The `vector` container fix was operational (`docker stop`), not a config/code change** -
+  logged here as a debugging note for future sessions, not something committed, since the
+  crash-loop is a Docker Desktop networking symptom on this machine, not a project setting.
+- **Grants-hardening migration numbered `20260713030000`**, later than the same day's Day 9
+  migrations - correct ordering, just flagging that "Day 10" and "Day 9" migrations both carry
+  a `20260713` date prefix since both landed the same calendar day in this project's timeline.
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content && npm
+  run test:coverage && npm run build`. 260 unit tests unchanged, 100% coverage maintained.
+- `scripts/smoke-test-rls.mjs`: **31/31 passed, both local and staging** (confirmed by directly
+  re-running, not inferred from the migration alone).
+- `information_schema.role_table_grants` against staging, post-migration: `anon` has zero grants
+  on any `public` table (checked directly); `authenticated`/`service_role` have exactly their
+  intended explicit grants (checked directly).
+- `admin.auth.admin.listUsers()` against staging: still exactly one user (`demo@taxops.local`) -
+  the extended smoke test's own throwaway user is still cleaned up correctly after the changes.
+- `npx supabase migration list --linked`: all four migrations match between local and staging,
+  no drift.
+- **Not verified, still blocked**: Vercel build success, `proxy.ts` on the deployed edge network,
+  env-leakage check on the deployed bundle, §9's human smoke test - all four need
+  `VERCEL_AUTOMATION_BYPASS_SECRET` to actually be reachable first.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

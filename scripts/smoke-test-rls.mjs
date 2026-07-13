@@ -1,11 +1,12 @@
 // One-off smoke test for Row Level Security (+ Day 7's partial-upsert mechanism, + Day 8's
-// checklist state tables). Not part of the automated test suite; run manually after schema
-// changes touch RLS policies, against either the local `supabase start` stack or a hosted
-// staging project (Day 10) - point NEXT_PUBLIC_SUPABASE_URL/SMOKE_TEST_*_KEY at either. Ensures
-// its own demo user exists via the service-role admin API rather than assuming
-// `supabase/seed.sql` has run (seed.sql is local-dev-only by design - `supabase db push`
-// against a hosted project never runs it, only migrations), so this script works unmodified in
-// both places. Creates a throwaway second user via the service-role client, then verifies:
+// checklist state tables, + Day 10's grants hardening). Not part of the automated test suite;
+// run manually after schema changes touch RLS policies or grants, against either the local
+// `supabase start` stack or a hosted staging project (Day 10) - point
+// NEXT_PUBLIC_SUPABASE_URL/SMOKE_TEST_*_KEY at either. Ensures its own demo user exists via the
+// service-role admin API rather than assuming `supabase/seed.sql` has run (seed.sql is
+// local-dev-only by design - `supabase db push` against a hosted project never runs it, only
+// migrations), so this script works unmodified in both places. Creates a throwaway second user
+// via the service-role client, then verifies:
 //   1. An anon (unauthenticated) client reads zero rows from `profiles`.
 //   2. An authenticated client reads exactly its own `profiles` row, never another user's.
 //   3. A partial upsert (`{ id, oneColumn }`) updates only that column, leaving the rest of
@@ -14,6 +15,11 @@
 //   4. An authenticated client cannot read, update, or delete another user's
 //      `checklist_item_states` / `checklist_custom_items` rows, and a targeted upsert against
 //      one item_id leaves every other item_id row for the same user untouched.
+//   5. `anon` is denied at the *privilege* layer (Postgres error code 42501), not just
+//      RLS-filtered to zero rows, on every user table - pins Day 10's grants-hardening
+//      migration (20260713030000_harden_data_api_grants.sql). Before that migration, this
+//      failed on a hosted project even though no data was ever exposed (RLS still filtered
+//      every row) - see PROGRESS.md Day 10.
 // Exits non-zero on any assertion failure.
 
 import { createClient } from "@supabase/supabase-js";
@@ -294,6 +300,30 @@ try {
     .delete()
     .eq("user_id", DEMO_USER_ID)
     .eq("item_id", TARGET_ITEM_ID);
+
+  console.log(
+    "\n5. anon is denied at the privilege layer (Day 10 grants hardening), not just RLS-filtered:",
+  );
+  const PRIVILEGE_DENIED_CODE = "42501"; // Postgres: insufficient_privilege
+  const USER_TABLES = [
+    "profiles",
+    "saved_articles",
+    "saved_scenarios",
+    "checklist_item_states",
+    "checklist_custom_items",
+  ];
+  for (const table of USER_TABLES) {
+    const { error: selectErr } = await anon.from(table).select("*").limit(1);
+    assert(
+      selectErr?.code === PRIVILEGE_DENIED_CODE,
+      `anon select on ${table} is denied at the privilege layer (code ${selectErr?.code ?? "none - got a response instead of an error"})`,
+    );
+    const { error: insertErr } = await anon.from(table).insert({});
+    assert(
+      insertErr?.code === PRIVILEGE_DENIED_CODE,
+      `anon insert on ${table} is denied at the privilege layer (code ${insertErr?.code ?? "none - got a response instead of an error"})`,
+    );
+  }
 } finally {
   console.log("\nCleaning up throwaway user...");
   await admin.auth.admin.deleteUser(secondUserId);

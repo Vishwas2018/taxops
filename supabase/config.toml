@@ -113,7 +113,12 @@ port = 54334
 # sender_name = "Admin"
 
 [storage]
-enabled = true
+# Disabled 2026-07-13 (Day 10): same flaky CloudFront mid-pull failures Day 2 already hit for
+# studio/edge_runtime, this time on the storage-api image, repeatedly breaking `supabase start`/
+# `db reset`. Zero application consumers - grepped src/ for any Storage usage, no hits, matching
+# v1 scope (no file-upload features). Reversible - flip back to `true` if a future feature needs
+# Supabase Storage or the network path clears.
+enabled = false
 # The maximum file size allowed (e.g. "5MB", "500KB").
 file_size_limit = "50MiB"
 
