@@ -75,7 +75,10 @@ colour-only meaning (pair colour with icon/text/pattern).
 
 After every feature: `npm run typecheck && npm run lint && npm run validate:content && npm test
 && npm run build`. Fix all failures before moving on. Commit with Conventional Commits after
-each green cycle.
+each green cycle. `npm run test:e2e` (Playwright - see `docs/e2e-testing.md`) runs separately,
+against a local Supabase stack (`npx supabase start` precondition) - not part of the fast inner
+loop, but required green before a day's work is considered done if it touches a user-facing
+flow.
 
 ## The three unforgivable shortcuts
 
@@ -131,7 +134,7 @@ their owner.
 | Styling | Tailwind CSS v4 + shadcn/ui (on `@base-ui/react`, not Radix — this shadcn version's default) |
 | Validation | Zod (v4), shared schemas in `src/lib/validation/` |
 | Forms | `react-hook-form` + `@hookform/resolvers/zod`. shadcn's `form.tsx` wrapper isn't in this registry version; a small local wrapper lives in `src/components/ui/form.tsx` once the first form needs it. |
-| Testing | Vitest for unit tests (100% coverage enforced on `src/lib/calculators/`), Playwright for 5–8 critical-path e2e flows only |
+| Testing | Vitest for unit tests (100% coverage enforced on `src/lib/calculators/`), Playwright (Chromium only, `next dev` + local Supabase) for critical-path e2e flows - see `docs/e2e-testing.md` |
 | Package manager | npm only. Some devDependencies require `--legacy-peer-deps` due to a shadcn/babel peer-range conflict on this Next 16 snapshot — this is dev-tooling only, no runtime impact. |
 | Hosting | Vercel |
 | Local dev DB | Supabase CLI (`supabase start`, requires Docker Desktop running) |

@@ -104,10 +104,12 @@ export function ContractorTakeHomeCalculator() {
             render={({ field }) => (
               <RadioGroup value={field.value} onValueChange={field.onChange} className="gap-3">
                 <label className="flex items-center gap-2 text-sm font-normal">
-                  <RadioGroupItem value="exclusive" /> Exclusive - super is paid on top
+                  <RadioGroupItem value="exclusive" aria-label="Exclusive - super is paid on top" /> Exclusive
+                  - super is paid on top
                 </label>
                 <label className="flex items-center gap-2 text-sm font-normal">
-                  <RadioGroupItem value="inclusive" /> Inclusive - super comes out of the rate
+                  <RadioGroupItem value="inclusive" aria-label="Inclusive - super comes out of the rate" />{" "}
+                  Inclusive - super comes out of the rate
                 </label>
               </RadioGroup>
             )}
@@ -119,7 +121,11 @@ export function ContractorTakeHomeCalculator() {
             control={control}
             name="hasHelpDebt"
             render={({ field }) => (
-              <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+              <Checkbox
+                aria-label="I have a HELP/STSL debt"
+                checked={field.value}
+                onCheckedChange={field.onChange}
+              />
             )}
           />
           I have a HELP/STSL debt

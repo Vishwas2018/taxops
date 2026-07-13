@@ -44,12 +44,12 @@ Open [http://localhost:3000](http://localhost:3000).
 | `npm test` | Vitest unit tests (single run) |
 | `npm run test:watch` | Vitest in watch mode |
 | `npm run test:coverage` | Vitest with coverage (100% enforced on `src/lib/tax/`) |
-| `npm run e2e` | Playwright critical-path e2e suite |
+| `npm run test:e2e` | Playwright critical-path e2e suite (see [`docs/e2e-testing.md`](./docs/e2e-testing.md)) |
 
 Run the full quality loop before committing:
 
 ```bash
-npm run typecheck && npm run lint && npm test && npm run build
+npm run typecheck && npm run lint && npm run validate:content && npm test && npm run build
 ```
 
 ## Project layout

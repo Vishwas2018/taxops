@@ -113,7 +113,7 @@ export function CustomItemRow({
   return (
     <div className="flex items-center justify-between gap-2 py-1.5">
       <label className="flex flex-1 items-center gap-2 text-sm font-normal">
-        <Checkbox checked={item.checked} onCheckedChange={toggle} />
+        <Checkbox aria-label={item.label} checked={item.checked} onCheckedChange={toggle} />
         {item.label}
       </label>
       <div className="flex gap-1">

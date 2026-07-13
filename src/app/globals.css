@@ -10,10 +10,17 @@
 @custom-variant dark (&:is([data-theme="dark"] *));
 
 /*
- * Token architecture: every color is a space-separated RGB channel triple so
- * Tailwind's <alpha-value> opacity modifiers work (bg-accent/60, etc). Raw hex
- * lives only in this block - components use semantic class names exclusively.
- * See docs/design.md for the source palette + contrast notes.
+ * Token architecture: every color is a space-separated RGB channel triple, referenced from
+ * @theme below as plain `rgb(var(--x))` (NOT `rgb(var(--x) / <alpha-value>)` - that placeholder
+ * is a Tailwind v3 convention its plugin system substituted at build time; Tailwind v4 has no
+ * such substitution step, so every `--color-*` variable computed as the literal, invalid string
+ * "rgb(79 70 229 / <alpha-value>)", making every semantic color in the app fail silently - a
+ * real, systemic Day 6.5 regression only caught by Day 9's first real-browser screenshots, since
+ * jsdom/RTL tests never inspect computed color values). Tailwind v4 generates opacity-modifier
+ * support (`bg-accent/60`) natively via `color-mix()` for any plain color value, so dropping the
+ * placeholder is sufficient - no other change needed. Raw hex lives only in this block -
+ * components use semantic class names exclusively. See docs/design.md for the source palette +
+ * contrast notes.
  */
 :root {
   /* FamilyFlux light palette - channels */
@@ -66,71 +73,71 @@
   --font-heading: var(--font-sans);
 
   /* FamilyFlux semantic tokens */
-  --color-bg: rgb(var(--bg) / <alpha-value>);
-  --color-surface: rgb(var(--surface) / <alpha-value>);
-  --color-surfaceElevated: rgb(var(--surface-elevated) / <alpha-value>);
-  --color-surfaceHero: rgb(var(--surface-hero) / <alpha-value>);
-  --color-textPrimary: rgb(var(--text-primary) / <alpha-value>);
-  --color-textSecondary: rgb(var(--text-secondary) / <alpha-value>);
-  --color-textMuted: rgb(var(--text-muted) / <alpha-value>);
+  --color-bg: rgb(var(--bg));
+  --color-surface: rgb(var(--surface));
+  --color-surfaceElevated: rgb(var(--surface-elevated));
+  --color-surfaceHero: rgb(var(--surface-hero));
+  --color-textPrimary: rgb(var(--text-primary));
+  --color-textSecondary: rgb(var(--text-secondary));
+  --color-textMuted: rgb(var(--text-muted));
 
-  --color-accent: rgb(var(--accent) / <alpha-value>);
-  --color-accentFg: rgb(var(--accent-fg) / <alpha-value>);
-  --color-accentOnSurface: rgb(var(--accent-on-surface) / <alpha-value>);
-  --color-accentSubtle: rgb(var(--accent-subtle) / <alpha-value>);
+  --color-accent: rgb(var(--accent));
+  --color-accentFg: rgb(var(--accent-fg));
+  --color-accentOnSurface: rgb(var(--accent-on-surface));
+  --color-accentSubtle: rgb(var(--accent-subtle));
 
-  --color-secondary: rgb(var(--secondary) / <alpha-value>);
-  --color-secondaryOnSurface: rgb(var(--secondary-on-surface) / <alpha-value>);
-  --color-secondarySubtle: rgb(var(--secondary-subtle) / <alpha-value>);
+  --color-secondary: rgb(var(--secondary));
+  --color-secondaryOnSurface: rgb(var(--secondary-on-surface));
+  --color-secondarySubtle: rgb(var(--secondary-subtle));
 
-  --color-success: rgb(var(--success) / <alpha-value>);
-  --color-successSubtle: rgb(var(--success-subtle) / <alpha-value>);
-  --color-warning: rgb(var(--warning) / <alpha-value>);
-  --color-warningSubtle: rgb(var(--warning-subtle) / <alpha-value>);
-  --color-danger: rgb(var(--danger) / <alpha-value>);
-  --color-dangerFg: rgb(var(--danger-fg) / <alpha-value>);
-  --color-dangerSubtle: rgb(var(--danger-subtle) / <alpha-value>);
-  --color-neutral: rgb(var(--neutral) / <alpha-value>);
-  --color-neutralSubtle: rgb(var(--neutral-subtle) / <alpha-value>);
+  --color-success: rgb(var(--success));
+  --color-successSubtle: rgb(var(--success-subtle));
+  --color-warning: rgb(var(--warning));
+  --color-warningSubtle: rgb(var(--warning-subtle));
+  --color-danger: rgb(var(--danger));
+  --color-dangerFg: rgb(var(--danger-fg));
+  --color-dangerSubtle: rgb(var(--danger-subtle));
+  --color-neutral: rgb(var(--neutral));
+  --color-neutralSubtle: rgb(var(--neutral-subtle));
 
-  --color-chart-1: rgb(var(--chart-1) / <alpha-value>);
-  --color-chart-2: rgb(var(--chart-2) / <alpha-value>);
-  --color-chart-3: rgb(var(--chart-3) / <alpha-value>);
-  --color-chart-4: rgb(var(--chart-4) / <alpha-value>);
-  --color-chart-5: rgb(var(--chart-5) / <alpha-value>);
-  --color-chart-6: rgb(var(--chart-6) / <alpha-value>);
+  --color-chart-1: rgb(var(--chart-1));
+  --color-chart-2: rgb(var(--chart-2));
+  --color-chart-3: rgb(var(--chart-3));
+  --color-chart-4: rgb(var(--chart-4));
+  --color-chart-5: rgb(var(--chart-5));
+  --color-chart-6: rgb(var(--chart-6));
 
   /* shadcn/ui primitive slots - aliased onto the same channel vars so every
      existing component (already semantic-class-only, no hardcoded colors)
      re-skins automatically with zero per-component edits. */
-  --color-background: rgb(var(--bg) / <alpha-value>);
-  --color-foreground: rgb(var(--text-primary) / <alpha-value>);
-  --color-card: rgb(var(--surface) / <alpha-value>);
-  --color-card-foreground: rgb(var(--text-primary) / <alpha-value>);
-  --color-popover: rgb(var(--surface) / <alpha-value>);
-  --color-popover-foreground: rgb(var(--text-primary) / <alpha-value>);
-  --color-primary: rgb(var(--accent) / <alpha-value>);
-  --color-primary-foreground: rgb(var(--accent-fg) / <alpha-value>);
-  --color-muted: rgb(var(--neutral-subtle) / <alpha-value>);
-  --color-muted-foreground: rgb(var(--text-muted) / <alpha-value>);
+  --color-background: rgb(var(--bg));
+  --color-foreground: rgb(var(--text-primary));
+  --color-card: rgb(var(--surface));
+  --color-card-foreground: rgb(var(--text-primary));
+  --color-popover: rgb(var(--surface));
+  --color-popover-foreground: rgb(var(--text-primary));
+  --color-primary: rgb(var(--accent));
+  --color-primary-foreground: rgb(var(--accent-fg));
+  --color-muted: rgb(var(--neutral-subtle));
+  --color-muted-foreground: rgb(var(--text-muted));
   /* shadcn's "accent" slot is a hover/highlight surface (menu items, active
      tabs) - distinct from the brand accent above, mapped to accentSubtle. */
-  --color-accent-foreground: rgb(var(--accent-on-surface) / <alpha-value>);
-  --color-secondary-foreground: rgb(var(--accent-fg) / <alpha-value>);
-  --color-destructive: rgb(var(--danger) / <alpha-value>);
-  --color-destructive-foreground: rgb(var(--danger-fg) / <alpha-value>);
-  --color-border: rgb(var(--border-c) / <alpha-value>);
-  --color-input: rgb(var(--border-c) / <alpha-value>);
-  --color-ring: rgb(var(--accent-on-surface) / <alpha-value>);
+  --color-accent-foreground: rgb(var(--accent-on-surface));
+  --color-secondary-foreground: rgb(var(--accent-fg));
+  --color-destructive: rgb(var(--danger));
+  --color-destructive-foreground: rgb(var(--danger-fg));
+  --color-border: rgb(var(--border-c));
+  --color-input: rgb(var(--border-c));
+  --color-ring: rgb(var(--accent-on-surface));
 
-  --color-sidebar: rgb(var(--surface) / <alpha-value>);
-  --color-sidebar-foreground: rgb(var(--text-primary) / <alpha-value>);
-  --color-sidebar-primary: rgb(var(--accent) / <alpha-value>);
-  --color-sidebar-primary-foreground: rgb(var(--accent-fg) / <alpha-value>);
-  --color-sidebar-accent: rgb(var(--accent-subtle) / <alpha-value>);
-  --color-sidebar-accent-foreground: rgb(var(--accent-on-surface) / <alpha-value>);
-  --color-sidebar-border: rgb(var(--border-c) / <alpha-value>);
-  --color-sidebar-ring: rgb(var(--accent-on-surface) / <alpha-value>);
+  --color-sidebar: rgb(var(--surface));
+  --color-sidebar-foreground: rgb(var(--text-primary));
+  --color-sidebar-primary: rgb(var(--accent));
+  --color-sidebar-primary-foreground: rgb(var(--accent-fg));
+  --color-sidebar-accent: rgb(var(--accent-subtle));
+  --color-sidebar-accent-foreground: rgb(var(--accent-on-surface));
+  --color-sidebar-border: rgb(var(--border-c));
+  --color-sidebar-ring: rgb(var(--accent-on-surface));
 
   /* Radii: sm 6px (inputs/badges) - md 10px (buttons/selects) - lg 16px (cards/dialogs) - xl 24px (hero) */
   --radius-sm: 0.375rem;
@@ -162,16 +169,28 @@
   * {
     @apply border-border;
   }
-  *:focus-visible {
-    outline: 2px solid rgb(var(--accent-on-surface));
-    outline-offset: 2px;
-  }
   body {
     @apply bg-background text-foreground;
   }
   html {
     @apply font-sans;
   }
+}
+
+/*
+ * Deliberately unlayered (not inside @layer base): Tailwind's cascade layer order is
+ * theme < base < components < utilities, so a rule in @layer base loses to *any* Tailwind
+ * utility class of equal specificity in the utilities layer - including something as
+ * innocuous as `outline-none` on Button (which has no focus-visible override of its own,
+ * relying entirely on this global rule per the Day 6.5 design). An unlayered rule beats every
+ * layered one regardless of source order, which is what actually makes "one global focus ring,
+ * no per-component focus classes needed" true. Found by Day 9's real-browser keyboard-only E2E
+ * test reading computed `outline` styles - jsdom/RTL never exercises CSS cascade layers, so no
+ * unit test could have caught this.
+ */
+*:focus-visible {
+  outline: 2px solid rgb(var(--accent-on-surface));
+  outline-offset: 2px;
 }
 
 /* Reduced-motion kill switch: forces every animation/transition to be

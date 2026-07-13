@@ -75,6 +75,7 @@ export function ChecklistGroupSection({
               <label className="flex items-start gap-2 text-sm font-normal">
                 <Checkbox
                   className="mt-0.5"
+                  aria-label={item.label}
                   checked={checked}
                   onCheckedChange={() => toggle(item.id)}
                 />

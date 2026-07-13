@@ -38,3 +38,50 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers (Chromium only - see playwright.config.ts)
+        run: npx playwright install --with-deps chromium
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase (Docker - preinstalled on ubuntu-latest runners)
+        run: supabase start
+
+      - name: Run Playwright e2e suite
+        run: npm run test:e2e
+        env:
+          # e2e/lib/supabase-admin.ts shells out to `supabase status -o json` for these when
+          # unset locally; CI injects them directly since the CLI is already available here.
+          NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54331
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.CI_SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload e2e screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-screenshots
+          path: e2e/screenshots/
+          retention-days: 14

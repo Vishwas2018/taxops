@@ -106,7 +106,13 @@ display. Scale: `display` 48px/1.05/−0.02em (hero numbers) · `h1` 32px · `h2
   2px; }` in `globals.css` — replaces the old per-component `ring-*` focus styling. Base UI
   internals that intentionally suppress the browser default outline (menu/select items, dialog
   content) keep their own bg-highlight focus treatment; that's an established listbox/menu
-  pattern, not a gap.
+  pattern, not a gap. **Deliberately unlayered** (not inside `@layer base`) - Tailwind's cascade
+  layer order (`theme < base < components < utilities`) meant a `@layer base` version of this
+  rule silently lost to any component's own Tailwind utility classes in the `utilities` layer
+  (e.g. Button's `outline-none`, which has no focus-visible override of its own), leaving every
+  button with no visible keyboard focus indicator at all. Found by Day 9's real-browser
+  keyboard-only E2E test reading computed `outline` styles - a CSS cascade-layer bug no
+  jsdom/RTL unit test could reproduce.
 
 ## Divergences from FamilyFlux
 

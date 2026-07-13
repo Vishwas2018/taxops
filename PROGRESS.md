@@ -952,6 +952,196 @@ Extended `scripts/smoke-test-rls.mjs` with a fourth section (10 new assertions, 
 - **Migration + RLS verified against a real running Postgres**, not simulated - see the ground-truth section above; 20/20 smoke-test assertions passed, including the new cross-user denial and partial-write isolation checks for both tables.
 - **Gap, same as every prior day**: no browser/Playwright tool in this environment, so the checklist page's actual visual appearance, hover/focus states, and a real authenticated click-through of check/uncheck, add-other-groups, and custom-item add/edit/delete were not seen in a live browser. The RTL tests exercise the real component tree (including a real `@base-ui/react` checkbox and its `role="checkbox"`/`aria-checked` output), real Zod validation, and (via the smoke test) real Postgres writes - the strongest verification available here - but that is not the same as having looked at it.
 
+## Day 9 — Playwright E2E + Visual Verification (2026-07-13)
+
+The gap every single prior day's PROGRESS.md flagged ("no browser/Playwright tool in this
+environment") closes today. First real click-through of the app in a live browser, and it found
+real bugs - some cosmetic-sounding but one is the most significant defect shipped so far (see
+below).
+
+### Precondition + setup
+
+Docker Desktop + `npx supabase start` already running from prior days. Playwright
+(`@playwright/test`) was already a devDependency (Day 1 scaffold); `@axe-core/playwright` added
+today as the one new devDependency this task explicitly sanctioned, for the WCAG A/AA scans.
+
+- **`playwright.config.ts`**: `webServer` switched from `npm run build && npm run start`
+  (production) to `npm run dev` (Turbopack dev server), per this task's explicit instruction to
+  run against `next dev` + local Supabase, not a production build. A `setup` project
+  (`e2e/auth.setup.ts`) runs before the single `chromium` project (Chromium only for v1, per
+  instruction - no cross-browser matrix), wired via `dependencies: ["setup"]`.
+- **`e2e/lib/supabase-admin.ts`**: `createE2ESupabaseAdminClient()` resolves the local Supabase
+  URL/service-role key from env vars if set (CI's path), otherwise shells out to
+  `npx supabase status -o json` (local-dev convenience - this runs on every e2e invocation,
+  unlike `scripts/smoke-test-rls.mjs`'s one-off manual env-var requirement, so the extra
+  convenience is worth it here). `seedE2EUser` creates/resets a dedicated
+  `e2e-user@taxops.local` user via the service-role admin API (`email_confirm: true`), which
+  bypasses email confirmation regardless of the project's `enable_confirmations` setting.
+  `resetE2EUserData` wipes that user's profile/checklist rows back to a known-empty slate -
+  exported separately so individual specs needing the wizard's *fresh* multi-step flow (not the
+  summary/edit view `/profile` shows once any answer exists) can call it in their own setup.
+- **`e2e/auth.setup.ts`**: seeds the E2E user, signs in through the real `/sign-in` form, then
+  visits every route the suite touches once (dashboard, profile, all three calculators,
+  checklists, tips + every article slug) before saving storage state to `e2e/.auth/user.json`
+  (gitignored). That warm-up loop exists because of a real environment finding - see below.
+- **Signup/signin specs run unauthenticated** via `test.use({ storageState: { cookies: [],
+  origins: [] } })`, per instruction. Signup uses a fresh `e2e-signup-<timestamp>@taxops.local`
+  throwaway email each run; local Supabase already had `enable_confirmations = false`
+  (`supabase/config.toml`, set on Day 1) so no real mail provider dependency exists for that flow
+  to complete - nothing needed changing there.
+- **Serial execution (`workers: 1`, `fullyParallel: false`)**: every spec shares the *one* seeded
+  E2E user's database rows - no per-test user provisioning was built (more infrastructure than
+  this suite's size justifies). Specs needing isolation either reset state themselves
+  (`resetE2EUserData`) or target something unaffected by other specs' mutations (the checklists
+  spec uses the "Receipts & evidence" group specifically, since `ALWAYS_DEFAULT_GROUP_IDS`
+  keeps it visible regardless of profile answers). Documented in `docs/e2e-testing.md`.
+
+### Specs written (11 files, 26 tests, all green)
+
+- `e2e/journeys/`: `signup.spec.ts`, `signin.spec.ts` (both → dashboard), `proxy-protection.spec.ts`
+  (unauthenticated `/dashboard` → redirect with `redirectTo`; public `/tips` reachable),
+  `profile-wizard.spec.ts` (full wizard walkthrough - skips the ABN step entirely, answers "0"
+  investment properties explicitly, confirms, then immediately checks `/checklists` to pin
+  yesterday's regression: the Property documents group is absent from defaults, not "0" falling
+  back to show-everything), `calculators.spec.ts` (all three calculators: fill → itemized results
+  → disclaimer, one numeric spot-check each via the dt/dd pairs - gross income $147,200,
+  combined income $265,000, pre-tax cash flow -$2,500 - not re-derived golden files, both the
+  results region and the disclaimer confirmed fully inside a 1280×1400 viewport via a real
+  `boundingBox()` check, not just "present in the DOM"), `checklists.spec.ts` (toggle an item →
+  reload → state persisted, restored after; add/edit/delete a custom item), `tips-article.spec.ts`
+  (FY badge, sources list with a real ATO URL, the article layout's own structural disclaimer).
+- `e2e/accessibility/`: `keyboard-wizard.spec.ts` (the *entire* wizard driven with real `Tab`/
+  `Space`/`Enter` key presses, no mouse - skips two steps via Tab-past, answers two via keyboard
+  selection, toggles one checkbox, reaches Confirm, checks a focused button's actual computed
+  `outline` style is `solid`/non-zero-width - not just present in a stylesheet), `axe-scans.spec.ts`
+  (`@axe-core/playwright`, WCAG 2.0/2.1 A+AA tags, on dashboard/contractor-calculator/wizard-step/
+  checklists - all four now 0 violations, see findings below for what wasn't 0 originally).
+- `e2e/visual/screenshots.spec.ts`: full-page PNGs of all 11 major surfaces (marketing home, both
+  auth pages, dashboard, wizard step, all three calculators with results, tips index + article,
+  checklists), committed under `e2e/screenshots/` as the review artifact this task asked for -
+  not snapshot-diff tests (no flake budget for that in v1).
+
+### Real bugs found and fixed - this is the actual payoff of the day
+
+**1. Every custom color in the app was silently broken (the big one).** The very first
+screenshot (`e2e/screenshots/01-marketing-home.png`) showed a completely monochrome app - no
+accent color anywhere, and the primary "Get started" button was functionally invisible (no
+background, no border, just floating text). Root cause, confirmed via
+`getComputedStyle`: every `@theme` color mapping in `globals.css` was written as
+`rgb(var(--accent) / <alpha-value>)` - a **Tailwind v3** convention where the `<alpha-value>`
+placeholder gets substituted by the v3 plugin engine at build time. **Tailwind v4 (this
+project's actual version, since Day 1) has no such substitution step**, so every one of the 27
+affected `--color-*` variables computed as the literal, invalid string
+`"rgb(79 70 229 / <alpha-value>)"`, which the browser silently rejects, falling back to nothing
+(transparent background, default black text). This has been broken since Day 6.5's design
+reskin - three days of screenshots would have shown it immediately, but that day explicitly
+flagged "no browser tool in this environment, the re-skin was not visually inspected" as the one
+gap left open. **Fixed** by dropping `/ <alpha-value>` from all 54 occurrences - Tailwind v4
+generates opacity-modifier support (`bg-accent/60`) natively via `color-mix()` for any plain
+color value, so no other change was needed. Confirmed via `getComputedStyle` before/after
+(`rgba(0, 0, 0, 0)` → `rgb(79, 70, 229)`) and by re-capturing every screenshot.
+**Zero unit/RTL test could have caught this** - jsdom doesn't evaluate real CSS custom property
+resolution against Tailwind's compiled output the way a real browser does.
+- **2. Every button had no visible keyboard focus indicator.** Day 6.5 added a global
+  `*:focus-visible { outline: 2px solid accentOnSurface; }` rule specifically so components
+  wouldn't need their own focus classes - but it was written inside `@layer base`. Tailwind v4's
+  cascade layer order is `theme < base < components < utilities`, so *any* component's own
+  Tailwind utility class in the `utilities` layer beats a `@layer base` rule outright, regardless
+  of source order or specificity - and `Button`'s base classes include a blanket `outline-none`
+  with no `focus-visible:` override of its own (unlike Checkbox/RadioGroupItem, which already
+  had their own explicit focus-visible ring classes). Every button in the app - Calculate, Next,
+  Confirm, Sign in, the lot - had `outline: none` and nothing to replace it. **Fixed** by moving
+  the rule out of `@layer base` entirely (deliberately unlayered CSS beats every layered rule
+  regardless of source order). Confirmed via the keyboard-only wizard spec reading the focused
+  Next button's computed `outline-style`/`outline-width` directly.
+- **3. Every Radio/Checkbox in the app had no accessible name at all** (axe:
+  `aria-toggle-field-name`, WCAG 4.1.2, impact "serious" - 3 nodes on the contractor calculator, 5
+  on the wizard's first step, 37 across the checklists page). `@base-ui/react`'s Radio/Checkbox
+  both render a plain `<span role="radio"|"checkbox">`; the enclosing-label pattern used
+  everywhere in this app (`<label><Control />text</label>`, adopted Day 4 for *toggling*) reliably
+  makes the control clickable/keyboard-operable but does **not** give it an accessible *name* -
+  the native `<label>`-association algorithm only computes a name from wrapped text for real
+  labelable elements (input/button/select/etc), and base-ui's own internal
+  `aria-labelledby` wiring for this pattern doesn't resolve to real content either. **Fixed** by
+  adding an explicit `aria-label` (the same visible text) to every Radio/Checkbox usage across
+  four files (`question-group-control.tsx`, `contractor-take-home-calculator.tsx`,
+  `checklist-group-section.tsx`, `custom-item-row.tsx`). All four axe-scanned pages now report 0
+  violations. **Side effect discovered while fixing**: with the explicit `aria-label` in place
+  *plus* base-ui's own internal (now-resolving) `aria-labelledby`, both Playwright's and
+  jsdom's `dom-accessibility-api` compute a doubled name ("PAYG employee PAYG employee") - a
+  shared quirk in how both libraries handle that combination, not something axe flags and not
+  something a real screen reader is expected to announce (aria-labelledby is supposed to fully
+  override aria-label per spec, not concatenate). Adjusted the affected locators (this suite's
+  own + one pre-existing unit test, `tax-profile-summary.test.tsx`) to substring/regex name
+  matches instead of exact-string matches - documented inline at each spot.
+- **4. A real React state bug, not just a test artifact**: the first wizard step logged a
+  console warning in a real browser - "A component is changing the uncontrolled value state of
+  RadioGroup to be controlled" - because `QuestionGroupControl` passed `value={undefined}` for
+  an unanswered question, then a real string once one was picked. **Fixed** in
+  `question-group-control.tsx`: unanswered now passes `""` instead of `undefined`, always
+  controlled from mount. jsdom/RTL never surfaced this because React's dev-mode warning path
+  isn't something the existing tests asserted against either way.
+- **5. Two E2E-infrastructure findings, not app bugs**, worth recording since they'll bite again
+  otherwise: (a) `next dev` (Turbopack) compiles each route lazily on first request, and a cold
+  compile can take 30-60s+ - enough to blow past Playwright's 30s default test timeout on the
+  very first spec to touch a given route. Fixed by bumping the suite's default timeout to 60s
+  and having `auth.setup.ts` warm every route once up front. (b) `react-hook-form`'s uncontrolled
+  `defaultValues` aren't present in the server-rendered HTML for the three calculator forms - the
+  field starts empty and gets populated client-side after hydration. Filling a field immediately
+  after `page.goto()` can race that populate step and double the value ("800" → "800800").
+  `e2e/lib/form.ts`'s `fillNumberField` waits for the field to be non-empty first. (c) the
+  Next.js Dev Tools floating button (dev-mode only) has the accessible name "Open Next.js Dev
+  Tools", which is a substring match for `getByRole("button", { name: "Next" })` under
+  Playwright's default non-exact matching - every "Next" button locator needed `exact: true`.
+  All three documented in `docs/e2e-testing.md`'s "Known environment quirks" section.
+
+### CI wiring
+
+- `package.json`: `"e2e"` script renamed to `"test:e2e"` (matches this task's naming, and the
+  convention `npm test`/`npm run test:coverage` already used). README/CLAUDE.md updated.
+- `.github/workflows/ci.yml`: new `e2e` job (separate from the existing `quality` job) - installs
+  the Supabase CLI (`supabase/setup-cli`), runs `supabase start`, installs Chromium
+  (`--with-deps`), runs `npm run test:e2e`, uploads the Playwright HTML report and
+  `e2e/screenshots/` as build artifacts (`if: always()`, so a failing run still leaves the
+  report/screenshots inspectable). Needs a `CI_SUPABASE_SERVICE_ROLE_KEY` repository secret (the
+  local Supabase CLI's fixed dev key - safe to store, it only ever points at an ephemeral
+  CI-local Postgres instance). **Not verified against a real GitHub Actions run** - no CI access
+  in this environment, same category of gap as every prior day's "not seen in a browser" note.
+  Flagging this explicitly rather than claiming the workflow file is proven, only that it's
+  written and reasoned through.
+- `docs/e2e-testing.md`: full local setup/run instructions, the storage-state/auth model, why the
+  suite runs serially, the screenshot workflow, and the environment quirks above.
+
+### Deviations
+
+- **`getDefaultChecklistGroupIds`'s "0 properties" behavior itself needed no fix** - Day 8's
+  logic was already correct (confirmed by today's journey-level regression pin actually passing
+  once the test itself was debugged into working order). The "regression" Day 9 was asked to pin
+  was already fixed at the unit level Day 8; today adds the journey-level pin on top, per
+  instruction.
+- **Screenshots are evidence, not assertions** - deliberately no pixel-diffing/snapshot
+  comparison, per this task's explicit "not snapshot-diff tests yet" scope note. Re-run
+  `npx playwright test e2e/visual/screenshots.spec.ts` and re-commit the PNGs whenever a surface
+  changes meaningfully.
+- **No cross-browser matrix** - Chromium only, per instruction. Firefox/WebKit are not installed
+  or configured; revisit only on explicit request.
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content && npm
+  test && npm run build`. 260 unit tests unchanged in count, 100% coverage maintained on
+  `src/lib/calculators/` (one existing test adjusted for the accessible-name duplication above,
+  not a new test).
+- **`npm run test:e2e`: 26/26 passed**, run clean (serially, no other Playwright/dev-server
+  process competing for the port) after every fix above was applied - not just "passed at some
+  point during debugging."
+- **The screenshots themselves were inspected directly** (not just "the test passed") - this is
+  what caught finding #1, which every automated assertion in the suite would have sailed past
+  (nothing asserts on color; `toBeVisible()` is satisfied by a zero-opacity-difference invisible
+  button just as much as a colored one).
+- Every finding above was verified fixed by re-running the specific spec that caught it, then the
+  full suite once more end-to-end.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

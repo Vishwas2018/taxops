@@ -41,7 +41,12 @@ describe("TaxProfileSummary", () => {
     render(<TaxProfileSummary profile={PROFILE} />);
 
     await user.click(within(rowFor("Household income")).getByRole("button", { name: /edit/i }));
-    await user.click(screen.getByRole("radio", { name: "Under $100k" }));
+    // Not an exact-name match: the Day 9 accessibility fix (question-group-control.tsx's
+    // explicit `aria-label`, added for a real axe "aria-toggle-field-name" finding) combines
+    // with @base-ui/react's own internal label association to compute a doubled accessible name
+    // ("Under $100k Under $100k") in dom-accessibility-api - a shared quirk with Playwright's own
+    // name computation, not a real double label a real screen reader would announce.
+    await user.click(screen.getByRole("radio", { name: /Under \$100k/ }));
     await user.click(screen.getByRole("button", { name: /^save$/i }));
 
     expect(mockSave).toHaveBeenCalledWith({ householdIncomeBand: "under_100k" });
@@ -55,7 +60,7 @@ describe("TaxProfileSummary", () => {
     render(<TaxProfileSummary profile={PROFILE} />);
 
     await user.click(within(rowFor("Household income")).getByRole("button", { name: /edit/i }));
-    await user.click(screen.getByRole("radio", { name: "Under $100k" }));
+    await user.click(screen.getByRole("radio", { name: /Under \$100k/ }));
     await user.click(screen.getByRole("button", { name: /cancel/i }));
 
     expect(mockSave).not.toHaveBeenCalled();
