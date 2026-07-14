@@ -82,6 +82,13 @@ re-commit whenever a surface changes meaningfully:
 npx playwright test e2e/visual/screenshots.spec.ts
 ```
 
+`e2e/visual/audit-screenshots.spec.ts` is a separate, broader one-off batch for external design
+review (see PROGRESS.md Day 11.9 and `docs/audit-self-review.md`): the same surfaces plus a
+filled calculator, a wizard step with an option selected, a checklists page with an item toggled
+and a custom item added, and 390px-wide mobile variants of the dashboard, one calculator, and the
+wizard. Outputs to its own `e2e/screenshots/audit/` folder so it doesn't overwrite the primary
+numbered set above. Re-run the same way, pointed at that file.
+
 ## CI
 
 `.github/workflows/ci.yml`'s `e2e` job installs the Supabase CLI (`supabase/setup-cli`), runs

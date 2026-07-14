@@ -1772,6 +1772,100 @@ before) asserts the four module names render and the no-outcome-promised line is
   "Superannuation Guarantee" before narrowing the list - a real true-positive-turned-false-
   positive caught by actually running the test, not assumed to work from reading it.
 
+## Day 11.9 — Audit screenshot set + self-audit (2026-07-14)
+
+### Regenerated the full screenshot suite, added the missing captures
+
+Ran `npm run test:e2e` in full (38 tests, all pass) - this naturally regenerated the existing
+numbered `e2e/screenshots/*.png` set against the current post-Day-11 build (visible in `git
+status`: 8 of the 11 changed, including `01-marketing-home.png` reflecting the new feature-grid
+homepage) as well as running the new spec below. New `e2e/visual/audit-screenshots.spec.ts`
+outputs a separate, broader batch to `e2e/screenshots/audit/` (16 PNGs) for external design
+review - full desktop set (marketing home, both auth surfaces, dashboard, tips index + article,
+all three calculators, checklists) plus the three captures this task asked to add if missing:
+a wizard step with an option actually selected (`wizard-step-1-with-selection.png` - the
+existing suite only had the empty/no-answer state), a checklists page with an item toggled and
+one custom item present (`checklists-with-toggle-and-custom-item.png`), and 390px mobile
+variants of the dashboard, the contractor take-home calculator, and the wizard
+(`mobile-*.png`). The "calculator in filled/results state" ask was **already covered** - all
+three calculator screenshots in the existing suite already filled the form and clicked
+Calculate before capturing - so no fourth new capture was needed there, just carried forward.
+
+**Draft-article exclusion verified two ways, not just eyeballed**: the tips-index test asserts
+`expect(page.getByText(title)).toHaveCount(0)` for all 6 Day 11 `draft: true` article titles
+*before* taking the screenshot, and the build output's `/tips/[slug]` static params (checked
+again this run) list only the original 3 published slugs. Both agree with what the screenshot
+itself shows.
+
+Absolute paths for all 16 audit PNGs (for upload to external review):
+
+```
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\auth-sign-in.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\auth-sign-up.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\calculator-contractor-take-home-filled.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\calculator-div-293-filled.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\calculator-property-cash-flow-filled.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\checklists-default.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\checklists-with-toggle-and-custom-item.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\dashboard.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\marketing-home.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\mobile-calculator-contractor-take-home.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\mobile-dashboard.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\mobile-wizard-step-1.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\tips-article.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\tips-index.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\wizard-step-1-empty.png
+C:\Users\vishw\Vish\Vish\KeepMore\taxops\e2e\screenshots\audit\wizard-step-1-with-selection.png
+```
+
+### Self-review written to `docs/audit-self-review.md` - findings only, no fixes
+
+Reviewed every one of the 16 screenshots against `docs/design.md` (elevation ladder, spacing,
+type hierarchy, `tabular-nums`, disclaimer prominence, empty states), screen by screen,
+severity-tagged. Highlights (full detail and every screen in the doc itself):
+
+- **[CRITICAL]** The app sidebar nav (`hidden ... md:block`) has **no mobile alternative
+  anywhere in the codebase** - confirmed by grep, not just by looking at one screenshot. Below
+  768px a signed-in user cannot navigate between app sections at all once they leave the
+  dashboard, except in-page links, browser back, or a typed URL. The single most severe finding
+  in this pass.
+- **[HIGH]** `tips-article.png` renders the footer disclaimer **twice**, back-to-back - the
+  nested `tips/[slug]/layout.tsx` and the parent `(marketing)/layout.tsx` each render their own
+  copy for that specific route. A genuine bug, not a polish nit; `/tips` (the index) confirms it
+  by *not* showing the duplication, since it lacks the extra nested layout.
+- **[HIGH]** Every text input renders `rounded-lg` (16px) instead of the doc's `sm` (6px) for
+  inputs, making every form field in the app fully pill-shaped at its `h-8` height. Isolated to
+  `src/components/ui/input.tsx` - one component, fixes every screen at once.
+- **[MEDIUM]** Elevation ladder isn't used consistently - no surface in the app currently uses
+  `variant="elevated"`, and the wizard plus every calculator's input form have **no** card/
+  surface wrapper at all, while the calculator results panel and dashboard summary cards do
+  (plain `border`, still no shadow). Clearest on the calculator screens, where the results panel
+  and the input form sit side by side with different treatment on the same screen.
+- **[LOW]** Percent figures (dashboard progress, checklist overall progress) don't carry
+  `tabular-nums` - verified by grep, not assumed; all three calculators' currency figures
+  correctly do.
+- Noted without investigating: a Next.js Dev Tools "1 Issue" indicator appeared during the
+  checklists toggle-and-custom-item capture - flagged in the review doc so it isn't lost, out of
+  scope for a design-alignment pass.
+
+### Deviations
+
+- **None** - no fixes applied to anything found above, matching this task's explicit "no fixes
+  applied yet" scope. Running the full suite (not just the new spec) also refreshed 8 of the 11
+  pre-existing numbered screenshots as a side effect of a real `npm run test:e2e` run - committed
+  alongside, since they now accurately reflect the current build rather than becoming stale.
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content &&
+  npm run test:coverage && npm run build`. 266 tests, 100% coverage maintained (this day added
+  an e2e spec, not a unit test - coverage numbers are unchanged from Day 11).
+- `npm run test:e2e`: full suite, 38/38 pass (25 pre-existing + 13 new in
+  `audit-screenshots.spec.ts`), confirming the new spec doesn't interfere with specs sharing the
+  same E2E user (Playwright's default file ordering runs `visual/` after `accessibility/` and
+  `journeys/`, so the audit spec's profile-reset/checklist-mutation calls land after other
+  specs' own assertions, not before).
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off
