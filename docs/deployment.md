@@ -136,6 +136,13 @@ section 5 now pins this explicitly - `anon` select *and* insert on every table m
 Postgres error `42501` (`insufficient_privilege`), not just return an empty/RLS-filtered result -
 so this can't silently regress again.
 
+**Same class of bug as the Vercel outage in §6**: the env vars above are exported into *this
+one shell command's* environment, not written anywhere durable. If this script mysteriously
+fails to reach staging (wrong project, auth errors), check first that you actually exported
+them in the shell you're running from, not a different one - "the value is set somewhere" and
+"the value is set where the running process can read it" are different claims, and conflating
+them is exactly what cost a full outage in §6.
+
 ## 5. Auth config for hosted (staging behaves like production)
 
 Unlike local dev (`enable_confirmations = false` in `supabase/config.toml`, so Day 9's E2E suite
@@ -307,6 +314,36 @@ happen to start fresh each time (so they saw it immediately); this session's Bas
 not. If a future "I set an env var, please check it" request seems to fail even though the
 value is confirmed in the registry/dashboard, try reading it through a different tool/process
 before concluding it's genuinely unset.
+
+**Re-verified 2026-07-14, after a reported env var fix + redeploy - outage still reproduces.**
+Re-ran the identical bypass-header checks against both known URLs (the deployment-specific hash
+alias and the hashless `taxops-vishwas2018s-projects.vercel.app` project alias, which should
+track the latest deployment). Both still return `500` on every non-static route (`/`, `/tips`,
+`/sign-in`, `/sign-up`, `/dashboard`, `/auth/confirm`), reproduced 3 times with distinct
+`X-Vercel-Id` values each time (so these are fresh invocations, not a stale cache) - the exact
+same signature as 2026-07-13: `/favicon.ico` still serves a clean `200`. **This means the fix
+described as complete has not actually resolved the deployed outage**, at least not at either
+URL this agent can reach. Did not attempt to guess further (no dashboard/API access to inspect
+which environment scope actually changed, or to confirm a new deployment actually built) - this
+is a "stop and report" finding, same boundary as the original outage. Worth checking, in order:
+- Whether the env var correction actually targeted the environment scope this URL serves
+  (Production vs Preview - fixing one doesn't fix the other).
+- Whether a new deployment was actually triggered *after* the env var change, not before it -
+  Vercel does not retroactively re-inject corrected env vars into an already-running deployment.
+- Whether the hashless alias has actually re-pointed to the newest deployment yet, or is still
+  serving an older build.
+
+**Durable lesson for future debugging, independent of whether this specific attempt worked**:
+the pattern "every route 500s identically except static assets, which serve fine" is not a
+generic crash - it is the fingerprint of code that runs on *every* request and nothing else,
+which in a Next.js app is almost always the middleware/proxy layer (`proxy.ts` here). Before
+chasing anything else (database connectivity, a specific page's server component, a build
+artifact issue), check what `proxy.ts` reads from `process.env` and whether those exact
+variables are confirmed present, correctly named, and scoped to **both** the right environment
+(Production/Preview) **and** Runtime (not just Build-time) for the deployment actually being
+hit. And after any env var correction, confirm a **fresh deployment** happened afterward -
+env var changes in the Vercel dashboard do not retroactively apply to a deployment that already
+finished building.
 
 ## 7. Migration discipline going forward (starts now, permanently)
 

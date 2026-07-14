@@ -1508,6 +1508,69 @@ deployment itself is healthy again, so a first automated check starts green.
   redirect behavior on a working deployment, public page content, env-leakage in delivered HTML,
   §9's human smoke test.
 
+## Day 10 continuation 4 — Verification after reported env fix: outage still reproduces (2026-07-14)
+
+### Re-ran the exact §6/§8 checks the task asked for - result contradicts the "fixed and redeployed" report
+
+Bypass secret still reachable (same PowerShell-vs-Bash process-inheritance quirk as continuation
+3 - used PowerShell again). Hit both known URLs with the bypass header:
+`taxops-zq0cyhorm-vishwas2018s-projects.vercel.app` (the specific deployment hash from
+continuation 3) and `taxops-vishwas2018s-projects.vercel.app` (the hashless project alias, which
+should track whatever the latest deployment is). **Both still return `500` on every non-static
+route** - `/`, `/tips`, `/sign-in`, `/sign-up`, `/dashboard`, `/auth/confirm` - reproduced 3
+consecutive times on `/sign-in` with three distinct `X-Vercel-Id` values (`syd1::xl464-...`,
+`syd1::b778j-...` twice), confirming these are fresh function invocations, not a stale cached
+response. `/favicon.ico` still serves a clean `200 image/vnd.microsoft.icon`. This is the
+identical signature documented in continuation 3, unchanged.
+
+**Conclusion: the env var fix + redeploy this task described as done has not resolved the
+deployed outage**, at least not at either URL reachable from this environment. Did not guess at
+why - no Vercel dashboard/API access exists here to check which environment scope was actually
+edited or whether a build actually completed after the edit (same human-owned boundary as every
+other Vercel-dashboard-only step in this doc). Three concrete possibilities written up in
+`docs/deployment.md` §6 for the human to check directly: the corrected var may be scoped to the
+wrong environment (Production vs Preview) relative to the URL being tested, the redeploy may have
+been triggered before the env var correction landed rather than after, or the hashless alias may
+still be pointing at an older, pre-fix deployment.
+
+**Everything downstream of the 500 is still blocked**, exactly as in continuation 3: env-leakage
+check on delivered HTML/bundles (nothing has ever loaded to inspect), `proxy.ts` redirect
+behavior on a working deployment, and §9's human smoke test. Not handing back for §9 - that
+would imply the deploy is healthy, which this re-check disproves.
+
+### Docs updated regardless - the debugging lesson holds independent of this attempt's outcome
+
+Added to `docs/deployment.md`:
+- **§6**: this re-verification's result, plus the general lesson: "every route 500s identically
+  except static assets" is the fingerprint of middleware/proxy-layer code failing on every
+  request, not a generic crash - check `proxy.ts`'s `process.env` reads first, confirm the
+  variables are scoped to *both* the right environment *and* Runtime (not just Build-time), and
+  confirm a fresh deployment happened *after* any env var correction (Vercel doesn't retroactively
+  re-inject corrected vars into an already-built deployment).
+- **§4**: a short cross-reference tying `smoke-test-rls.mjs`'s shell-exported env vars to the
+  same underlying bug class ("set somewhere" vs "set where the running process can read it") -
+  the RLS-verification section already demonstrates the same shell/process-env distinction that
+  caused continuation 3's Bash-vs-PowerShell quirk, so it's a natural, non-forced place for the
+  reminder rather than duplicating unrelated Vercel detail there.
+
+### Deviations
+
+- **None** - no code touched, no attempt to work around the still-missing dashboard/API access.
+  This entry is a "stop and report" finding, same boundary as continuations 2 and 3.
+
+### Verification
+
+- Bypass secret reachability: reconfirmed via PowerShell (same registry-read method as
+  continuation 3).
+- 6 routes checked against 2 known URLs, `/sign-in` re-checked 3x with distinct `X-Vercel-Id`
+  values to rule out cache/transience - all consistent, reproduced directly, not inferred.
+- **Still not verified, still blocked**: env-leakage check on delivered HTML/bundles, `proxy.ts`
+  redirect behavior on a working deployment, §9's human smoke test - all four need the deployed
+  app to actually serve a non-500 response first, which it does not yet.
+- CI: no code changed this entry (docs + `PROGRESS.md` only), so no new CI run needed to verify
+  against; last run on `main` (`docs: Day 10 deploy verification - found a real staging outage`,
+  2026-07-13) is green per `gh run list`.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off
