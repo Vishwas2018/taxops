@@ -1571,6 +1571,69 @@ Added to `docs/deployment.md`:
   against; last run on `main` (`docs: Day 10 deploy verification - found a real staging outage`,
   2026-07-13) is green per `gh run list`.
 
+## Day 10 continuation 5 — Final verification: root cause was zero env vars, now fixed (2026-07-14)
+
+### Root cause, confirmed via dashboard (not inferred this time)
+
+The 2026-07-13 "fix" never actually landed - **the project had zero environment variables set**,
+confirmed directly in the Vercel dashboard, not a Production-vs-Preview scoping mismatch as
+hypothesized in continuation 4. The runtime function log made this unambiguous: `Missing
+required environment variable: NEXT_PUBLIC_SUPABASE_URL`, thrown from `requireEnv` inside
+`updateSession()` - the exact function and exact variable named in the 2026-07-13 source-level
+diagnosis (`src/lib/supabase/middleware.ts`), just confirmed by the platform's own log instead of
+inferred from the HTTP status pattern alone. Both `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` are now added (all environments), followed by a fresh no-cache
+redeploy.
+
+### Re-ran the full §6/§8 verification - everything passes
+
+- `/` → `200`, title `TaxOps`, real HTML (20,116 bytes).
+- `/tips` → `200`, title `Tax Tips — TaxOps`, `<h1>Tax Tips</h1>`.
+- `/sign-in` → `200`, title `Sign in — TaxOps`.
+- `/sign-up` → `200`, title `Create account — TaxOps`.
+- `/dashboard` (unauthenticated) → `307` to `/sign-in?redirectTo=%2Fdashboard` via `proxy.ts` -
+  matches the Day 2/Day 9 locally-verified behavior exactly.
+- `/auth/confirm` (no token) → `307` to `/sign-in?error=auth-confirm-failed`, not an error -
+  responds correctly at the status level, as this check only ever required.
+- **Env-leakage check**: fetched the root and `/sign-in` HTML plus all ten `/_next/static` JS
+  chunks referenced from the root page; searched for `SERVICE_ROLE`, any secret-shaped
+  uppercase env name, any `*.supabase.co` URL, and any JWT-shaped (`eyJ...`) token. Found none
+  of the above - not even the expected `NEXT_PUBLIC_SUPABASE_URL`/anon key. Traced why:
+  `src/lib/supabase/client.ts` (the browser Supabase client factory) has **zero importers**
+  anywhere under `src/` right now - every existing auth flow (sign-in, sign-up, confirm) runs
+  through the server-only `server.ts` client and `proxy.ts`, never the browser client. Nothing
+  ships because nothing client-side reads those vars yet; this is expected given the current
+  code, not a gap. Flagged in `docs/deployment.md` §6 as worth re-checking the day a client
+  component first imports `client.ts` - the anon key appearing in a bundle at that point is
+  correct and by design (§6's env var table already covers why it's meant to be public), just
+  worth confirming it's *only* the anon key/URL and nothing else at that time.
+
+### `docs/deployment.md` updated - incident closed in §6
+
+Added the confirmed root cause (zero vars, not a scoping mismatch), the full re-verification
+result, and a concrete process addition: **check that the environment variables list is
+non-empty before triggering a redeploy meant to fix an env issue** - this exact incident's root
+cause would have been caught in seconds by that one look, before reaching for the deeper
+Production-vs-Preview/Runtime-vs-Build-time diagnosis (still correct, still kept in the doc, just
+now framed as the second thing to check, not the first).
+
+### Deviations
+
+- **None.**
+
+### Verification
+
+- All 6 routes checked directly against the live deployment with the bypass header, statuses and
+  redirect targets read from actual response headers, not assumed.
+- Env-leakage check performed against actual fetched bundle content (681,874 chars across 10
+  chunks plus 2 HTML documents), not a static-analysis guess.
+- Full quality loop unaffected (docs-only change) - last code-touching commit's CI run remains
+  green; this entry's own commit re-confirmed green via `gh run watch` before hand-back.
+
+**Handing back for §7/§9**: the human's manual browser smoke test (signup → email confirm →
+profile wizard → calculator → checklist) is the one remaining unverified step. Migration
+discipline (§7) has no outstanding action - already in effect since the Day 10 grants migration.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

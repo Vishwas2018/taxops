@@ -345,6 +345,37 @@ hit. And after any env var correction, confirm a **fresh deployment** happened a
 env var changes in the Vercel dashboard do not retroactively apply to a deployment that already
 finished building.
 
+**Closed 2026-07-14 - actual root cause confirmed via Vercel dashboard: the project had zero
+environment variables set.** The 2026-07-13 "fix" never actually landed - **Settings →
+Environment Variables** was empty, not misscoped. The runtime function log confirmed this
+directly: `Missing required environment variable: NEXT_PUBLIC_SUPABASE_URL`, thrown from
+`requireEnv` inside `updateSession()` - matching the `src/lib/supabase/middleware.ts` diagnosis
+from 2026-07-13 exactly, just with the dashboard log as direct confirmation instead of inference
+from the HTTP status pattern alone. Both `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_ANON_KEY` are now added (all environments), followed by a fresh no-cache
+redeploy. Re-verification confirms the fix: `/`, `/tips`, `/sign-in`, `/sign-up` all serve `200`
+with real page content (correct `<title>`/`<h1>` per page); `/dashboard` (unauthenticated)
+redirects `307` to `/sign-in?redirectTo=%2Fdashboard` via `proxy.ts`, exactly as designed;
+`/auth/confirm` (no token) redirects `307` to `/sign-in?error=auth-confirm-failed` rather than
+erroring. Env-leakage check on the delivered root/`/sign-in` HTML and all ten `/_next/static`
+JS chunks: no `SERVICE_ROLE`, no other secret-shaped string, no Supabase URL or JWT-shaped token
+found anywhere - in fact **no `NEXT_PUBLIC_*` Supabase value ships to the browser at all yet**,
+because `src/lib/supabase/client.ts` (the browser client factory) currently has zero importers
+under `src/`; every existing auth flow runs through the server-only `server.ts` client and
+`proxy.ts`. Nothing to leak because nothing client-side reads those vars yet - worth re-running
+this exact check once a client component starts importing `client.ts`, since that's the point
+the anon key would first appear in a shipped bundle (expected and fine when it does - the anon
+key is designed to be public, per §6's env var table above).
+
+**Checklist addition, going forward - verify the environment variables list is actually
+non-empty before every redeploy that's meant to fix an env-related issue**: `Settings →
+Environment Variables` should show at least the three `NEXT_PUBLIC_*` vars from the table above
+before you trigger the deploy, not after. This incident's root cause (zero vars, not misscoped
+ones) would have been caught in seconds by this one look - the deeper diagnosis in this section
+(Production-vs-Preview scoping, Runtime-vs-Build-time, typos, fresh-redeploy-required) is still
+correct and worth knowing, but only matters once "is the list non-empty at all" has already been
+confirmed. Check the cheap thing first.
+
 ## 7. Migration discipline going forward (starts now, permanently)
 
 Days 7 and 8 both dropped and replaced whole tables/columns mid-development (documented
