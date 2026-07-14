@@ -1634,6 +1634,144 @@ now framed as the second thing to check, not the first).
 profile wizard → calculator → checklist) is the one remaining unverified step. Migration
 discipline (§7) has no outstanding action - already in effect since the Day 10 grants migration.
 
+## Day 11 — Content + Compliance Pass (2026-07-14)
+
+### Carry-over from Day 10 §9 smoke test: none supplied, flagged rather than assumed
+
+This task's own template for "Carry-over from smoke test" arrived unfilled (the literal
+placeholder text, not a real list or the word "none"). Rather than silently treat that as "no
+issues," it's flagged here explicitly - **please confirm whether the §9 smoke test surfaced
+anything** before treating this day's work as the full remaining scope. Nothing in this entry
+below addresses a smoke-test finding, since none was actually provided.
+
+### Content expansion: 3 seed articles → 9 total, 6 new
+
+Added, all `financialYear: "2025-26"`, `reviewDate: "2026-07-14"`:
+
+- **contractor-expenses** (now 3): `home-office-running-costs-for-contractors.mdx` (fixed-rate
+  vs actual-cost methods), `tools-and-equipment-depreciation-for-contractors.mdx` (immediate
+  deduction vs decline in value, low-value pooling, balancing adjustments on disposal).
+- **property-deductions** (now 3): `interest-deductibility-for-investment-loans.mdx` (purpose-
+  of-borrowing test, redraw vs offset, mixed-purpose apportionment), `depreciation-schedules-
+  and-quantity-surveyors.mdx` (Division 40 vs 43, the second-hand plant/equipment restriction,
+  why a QS report is the practical mechanism).
+- **superannuation** (now 2): `division-293-tax-explained.mdx` (the combined-income test, the
+  effective ~30% rate, independence from the concessional cap).
+- **wealth-preservation** (now 1, new category): `record-keeping-and-cgt-evidence.mdx` (why CGT
+  records outlive the general 5-year rule, what builds a cost base, why depreciation claimed
+  reduces it at disposal).
+
+All 400-700 words (477-508 actual), pass `npm run validate:content`, follow the seed articles'
+existing structure (general mechanism → nuance → record-keeping → explicit "what this doesn't
+cover" boundary), and use "claim"/"deductible" as ordinary descriptive vocabulary throughout -
+same as the approved seed content - never as a second-person instruction.
+
+**Shipped `draft: true`, not `draft: false` like the Day 6 seed articles.** The constitution's
+default (CLAUDE.md §"v1 Scope", Human Gate 2) is `draft: true` until content review; the seed
+articles' `draft: false` was an explicit, one-off, documented Day 6 deviation ("pipeline-proving
+placeholders"), not a precedent this day extends. Gate 2 is still open (see Human gates below),
+so these 6 stay unpublished (excluded from `/tips` and `generateStaticParams` - confirmed in
+the build output, which lists only the original 3 slugs) until reviewed and flipped.
+
+**Source URLs could not be click-verified by this agent.** Every direct `WebFetch` attempt
+against `ato.gov.au` returned `HTTP 403` in this session - including against a URL already
+cited as a working source in `fy2025-26.ts`'s own config, so this is bot-blocking of the fetch
+tool itself, not a sign of a bad URL. The 12 source URLs above follow the exact path structure
+of the two ATO pages already cited in the seed articles and `tax-config` (same domain
+conventions: `/individuals-and-families/...`, `/rates/...`), chosen for structural accuracy, not
+independently browser-confirmed. **These need the human's own click-through before Gate 2**,
+the same "stop and report, don't guess" boundary as every dashboard/API-gated step in this
+project - and this exact limitation is now documented as the reason `docs/updating-tax-data.md`
+frames ATO verification as a mandatory human/browser step, not an agent one.
+
+### Compliance audit: swept, no violations found in existing UI copy
+
+Manually reviewed every named surface: both calculator results components, the tax-profile
+wizard and its question copy, the checklists page/templates/client (including empty and
+hidden-group states), the dashboard, the marketing home/tips pages, and the auth pages. A
+`grep -i` sweep of `src` for `you should|we recommend|guarantee[ds]?|will save you|must claim`
+found only false positives (`Superannuation guarantee` the SG payment line item, `guaranteed`
+inside dev comments) - **no actual violations to fix**. Documented here per the task's own "list
+them in PROGRESS.md" instruction, even though the list is empty: the audit happened and found
+the existing copy already compliant, this isn't a skipped step.
+
+### Extended the no-advisory-phrasing lint, beyond just checklists
+
+New `src/lib/compliance/copy-audit.test.ts`, alongside (not replacing) the original
+`templates.test.ts` checklist-only lint. Covers two additional UI copy sources (`CALCULATORS`
+cards, `TAX_PROFILE_QUESTION_GROUPS` incl. every option label) plus every article MDX body
+found under `content/`.
+
+**Deliberately two different banned-word lists, not one reused list** - documented in the test
+file itself: UI copy still bans "claim" outright (it reads as a direct instruction to the
+reader there), but article prose cannot ban "claim" the same way - every seed and new article
+uses it as ordinary tax-law vocabulary ("a deduction claim", "claimed in full"), so a bare ban
+would fail all nine articles including the already-approved seed three. Article prose is
+instead checked for actual advisory/certainty patterns ("you should", "we recommend", "you
+must") plus outcome-guarantee phrases (`"guaranteed to"`, `"we guarantee"` - not bare
+"guarantee", which collided with the real term "Superannuation Guarantee" the first time this
+test ran, caught immediately by `concessional-contributions-cap-explained.mdx` failing on its
+own legitimate use of that name).
+
+Freeform page-level JSX text that isn't a named constant (marketing hero copy, dashboard
+headings) isn't reachable by this data-driven approach - covered by the manual sweep above
+instead, same tradeoff the original checklist-only test already had.
+
+### `docs/updating-tax-data.md` added
+
+Annual FY-update procedure: duplicate-the-config-file pattern (and the fact that there's no
+single cutover seam yet - `fy2025_26` is imported by name at roughly a dozen call sites, grep
+for it rather than assuming a registry exists), the click-verification requirement now backed
+by this day's own repeated 403 finding, the Day 3.5 FY-mislabeling near-miss (a secondary
+source titled "...for 2026" actually describing FY2026-27 HELP thresholds, not FY2025-26) as
+the documented warning, golden-file regeneration procedure (Day 3.5's Medicare-threshold change
+as the worked example - exactly one test affected, both expected values hand-recomputed), the
+`reviewDate` refresh-on-figure-change step, and the two mandatory re-review triggers: 1 July
+(routine) and May Budget night - citing the FY2025-26 Medicare low-income thresholds' own 2.9%
+retroactive uplift (Budget Paper No. 2, 12 May 2026, applied back to 1 July 2025) as precedent
+that a Budget can change a current, already-Gate-1-reviewed year's figures, not just next
+year's.
+
+### Marketing page: no literal placeholder text found; expanded thin copy into real positioning
+
+The existing homepage had no "Lorem ipsum"/TODO-style placeholder - it was already compliant
+("Educational only — not lodgement, not personal advice") but thin (one hero paragraph, no
+description of what the product actually contains). Added an exported `FEATURES` array (now
+covered by the compliance sweep above) with one card per v1-visible module - guided tax
+profile, estimate calculators, EOFY checklists, tax tips knowledge base - each described by what
+it does and its educational framing, no outcome language. New `page.test.tsx` (none existed
+before) asserts the four module names render and the no-outcome-promised line is present.
+
+### Deviations
+
+- **New articles shipped `draft: true`**, not matching the Day 6 seed articles' `draft: false` -
+  see "Content expansion" above; this is a return to the constitution's stated default, not a
+  deviation from it, but flagged since it means these 6 won't be visible in a browser until
+  Gate 2 review flips them.
+- **Source URLs not click-verified** - see above; structurally-accurate but not browser-
+  confirmed, needs human follow-up before Gate 2, same as every ATO-URL caveat already on
+  record for this project's existing config and seed articles.
+- **Two banned-word lists instead of reusing one** for the extended lint test - see "Extended
+  the no-advisory-phrasing lint" above for why a single reused list breaks on legitimate
+  content.
+- **Carry-over smoke-test issues not addressed** - none were actually supplied this round (see
+  top of this entry).
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content &&
+  npm run test:coverage && npm run build`. 266 tests (up from 260), 100% coverage on
+  `src/lib/calculators/` maintained.
+- `npm run validate:content`: 9/9 articles pass (schema, slug/folder match, no disclaimer
+  duplication).
+- Build output's `/tips/[slug]` static params list exactly the original 3 slugs - confirms the
+  6 new `draft: true` articles are correctly excluded from the live site, not just excluded in
+  theory.
+- New `copy-audit.test.ts` (3 tests) and `page.test.tsx` (3 tests) both pass; ran the article-
+  body check once with the original banned-word list to confirm it correctly failed on
+  "Superannuation Guarantee" before narrowing the list - a real true-positive-turned-false-
+  positive caught by actually running the test, not assumed to work from reading it.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off
@@ -1641,6 +1779,9 @@ discipline (§7) has no outstanding action - already in effect since the Day 10 
 - ⛔ **Gate 2** (end of Day 8): all article content + calculator outputs reviewed against ATO
   guidance; articles stay `draft: true` until approved. **Note (Day 6)**: the 3 seed articles
   currently ship `draft: false` as pipeline-proving placeholders per explicit Day 6 instruction
-  - they still need this review before being treated as approved public content.
+  - they still need this review before being treated as approved public content. **Note (Day
+  11)**: 6 further articles added, correctly `draft: true` pending this same review - their
+  source URLs are structurally-accurate but not browser-click-verified (see Day 11 entry), so
+  that verification is part of what this gate needs to cover for them specifically.
 - ⛔ **Gate 3** (end of Day 10): production Supabase project + Vercel env vars + deploy
   approval.
