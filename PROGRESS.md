@@ -1866,6 +1866,150 @@ severity-tagged. Highlights (full detail and every screen in the doc itself):
   `journeys/`, so the audit spec's profile-reset/checklist-mutation calls land after other
   specs' own assertions, not before).
 
+## Day 12 Part A — Fixing the Day 11.9 self-audit findings (2026-07-15)
+
+Fixed every CRITICAL/HIGH/MEDIUM finding from `docs/audit-self-review.md`, plus the LOW items
+that were cheap. Scope was explicitly "fix objective defects against `docs/design.md`," not new
+design work - no new dependencies, stayed inside the doc's existing vocabulary (radii table,
+`Card` variants, `tabular-nums` rule).
+
+### [CRITICAL] Mobile navigation
+
+Below `md`, `(app)/layout.tsx`'s sidebar was `hidden ... md:block` with nothing standing in for
+it - confirmed by the audit's grep, no hamburger/Sheet/Drawer existed anywhere. Built
+`src/components/nav/mobile-nav.tsx`: a top-bar hamburger button (visible `md:hidden`, next to a
+`TaxOps` wordmark in the same row as `UserMenu`) opening a left slide-over listing the same five
+destinations as `AppSidebar` - both now read from a shared `src/components/nav/nav-items.ts` so
+they can't drift apart.
+
+**Judgment call - top bar + sheet over a bottom tab bar**: chose the sheet because it reuses
+`ui/dialog.tsx`'s existing `@base-ui/react` Dialog primitive (modal by default: focus trap, body
+scroll lock, and Escape-to-close are the primitive's job, not hand-rolled) and because it can
+literally reuse the same nav-items list as the desktop sidebar with zero layout redesign. A
+bottom tab bar would need five evenly-sized icon+label slots designed from scratch and doesn't
+map onto an existing component - more new surface for a fix-scoped task.
+
+**A real bug found and fixed along the way**: the first implementation wrapped each nav `Link`
+in `DialogClose` (mirroring the existing X-button-close pattern in `ui/dialog.tsx`). That
+unmounts the Popup - and the Link inside it - in the same tick as the click, racing Next's
+client-side navigation and silently dropping it before the route changed (e2e caught this: URL
+stayed on `/dashboard` after clicking "Checklists"). Fixed by controlling `open` state locally
+and closing it via a render-time reset keyed on `pathname`
+(https://react.dev/learn/you-might-not-need-an-effect#adjusting-some-state-when-a-prop-changes -
+not a `useEffect`, which `eslint-plugin-react-hooks` correctly flags as cascading-render-prone
+for this exact pattern) - the sheet now closes because the route changed, not because closing it
+was what triggered the route change.
+
+**Accessible name correction**: the sheet's `DialogTitle` originally read "TaxOps" (matching the
+sidebar's own wordmark), but Base UI wires the dialog's `aria-labelledby` to whatever renders as
+`DialogTitle` - this wins over any `aria-label` set on the popup itself, and "TaxOps" as a
+dialog name reads as a second, ambiguous brand link to screen reader users. Changed the visible
+title to "Menu".
+
+Covered by `e2e/journeys/mobile-nav.spec.ts` (390px): open → navigate to Checklists → assert
+arrival at `/checklists` with the sheet closed; all five destinations are listed; focus is
+trapped for 10 Tab presses, body scroll is locked while open, and Escape closes it and returns
+focus to the trigger. The focus-trap assertion uses `expect.poll` rather than a bare
+`page.evaluate` check - Base UI's focus-guard redirect at the trap boundary lands a tick after
+the native Tab keypress, and a synchronous check raced it intermittently (2/3 flaky before the
+fix, 0/8 after across repeated local runs).
+
+### [HIGH] Double disclaimer on `/tips/[slug]`
+
+`tips/[slug]/layout.tsx` rendered its own `<Disclaimer variant="footer" />` "so an MDX file can't
+omit it" - but `(marketing)/layout.tsx` already renders one unconditionally for every route in
+that group, this one included, so the guarantee already existed one level up. Removed the
+nested layout's copy; the no-omit guarantee is unaffected (the parent layout can't be bypassed
+by any route under it). Swept every other `layout.tsx` in the app (`(app)`, `(auth)`, root,
+`(marketing)`) - `/tips/[slug]` was the only route nested under two layouts, so no other instance
+of this duplication class exists.
+
+Added a regression test (`page.test.tsx`) that composes `MarketingLayout` around
+`TipArticleLayout` the way Next.js actually nests them for this route, and asserts
+`getAllByText(STANDARD_DISCLAIMER)).toHaveLength(1)`. Also split `layout.test.tsx`'s old
+"renders the standard disclaimer" test (which was asserting the bug as if it were the intended
+contract) into one test confirming the layout renders its children unmodified, and one
+confirming it does *NOT* render its own disclaimer. Found the same stale assumption baked into
+`e2e/journeys/tips-article.spec.ts`, which asserted the disclaimer specifically **inside
+`<main>`** with a comment claiming "both legitimately render on this page" - updated to assert
+exactly one disclaimer, outside `<main>`.
+
+### [HIGH] Input radius
+
+`src/components/ui/input.tsx` used `rounded-lg` (16px) against the doc's `sm` (6px) for inputs -
+at the input's `h-8` height that's a full pill. Single-line fix (`rounded-lg` → `rounded-sm`)
+corrects every input in the app at once, confirmed no per-page `className` override on any
+`<Input>` usage could reintroduce a pill (grepped all ~20 call sites - none pass a `className`).
+Also fixed the same wrong radius on the property-cash-flow calculator's hand-rolled native
+`<select>` (not the shared `Input` component, but visually indistinguishable from one, and it
+carried the identical bug). Left `select.tsx` and `textarea.tsx`'s vendored shadcn primitives
+with the same latent `rounded-lg` - neither has a live consumer anywhere in the app yet, so
+fixing them is out of this fix-scoped task; flagging here so it isn't lost before either is
+ever wired up.
+
+### [MEDIUM] Elevation consistency
+
+**Judgment call**: leaned into "apply `variant="elevated"`" rather than "flat is the intentional
+look," per the audit's own framing that this is a judgment call either way is valid. Applied:
+
+- Calculator forms (`contractor-take-home`, `div-293`, `property-cash-flow`): the input side
+  now sits in a base `<Card>` (matching the results panel's existing surface, not elevated
+  itself - the two panels read as one system instead of "styled panel next to raw fields").
+- Calculator results panels: `variant="elevated"` added (was base `Card` in all three).
+- Wizard question/review content (`tax-profile-wizard.tsx`): now wrapped in a base `<Card>`,
+  matching the calculator forms' treatment for the same kind of content (a question surface in
+  the same app shell).
+- Dashboard: the "Tax profile" and "EOFY checklist" summary cards get `variant="elevated"`; the
+  three calculator link-cards (already `variant="interactive"` for the hover lift) additionally
+  get `shadow-raised` via `className` rather than switching `variant`, since `interactive`'s
+  hover-lift behavior needed to stay and the two aren't mutually exclusive at the class level.
+
+Left the calculator pages' "no result yet" placeholder text unwrapped (not matching the
+results-Card shape until a result exists) - out of the audit's specific complaint (which was
+about the form vs. results asymmetry, not the pre-submit empty state), flagging rather than
+expanding scope silently.
+
+### [LOW] `tabular-nums` and the dev-tools indicator
+
+Added `tabular-nums` to the three percent figures the audit found missing it: both dashboard
+progress cards (`completeness.percent`, `checklistProgress.percent`) and the checklists overall-
+progress line. The checklists one required wrapping just the digits in their own `<span>` (the
+sentence around it also contains a literal `%` and "complete)" text) - broke the existing unit
+test's plain-string/regex `getByText` match (RTL's default text matcher requires the full string
+in one uninterrupted text node, not concatenated across child elements), fixed by matching on
+the paragraph's assembled `textContent` via a function matcher instead.
+
+**"1 Issue" dev-tools indicator - classified and fixed, not just logged**: reproduced it by
+running `next dev` directly and reading the terminal, not just the browser. It was Turbopack's
+workspace-root inference warning - the parent `KeepMore/` directory (outside this repo) has an
+unrelated, empty, accidental `package-lock.json`, so Turbopack detected two lockfiles and
+guessed a root spanning both. Fixed with `turbopack.root` in `next.config.ts`, scoped to this
+project's own directory, per Next's own documented remedy for exactly this warning. Confirmed
+by restarting `next dev` and diffing the startup log (warning gone), and the regenerated
+`checklists-with-toggle-and-custom-item.png` screenshot now shows the dev-tools badge with no
+"1" overlay. Did not touch the stray outer lockfile itself - it's outside this git repository
+entirely, not this task's to clean up.
+
+### Deviations
+
+- Did not fix `select.tsx`/`textarea.tsx`'s matching `rounded-lg` bug (see Input radius above) -
+  no live consumer, out of a fix-scoped task's boundary.
+- Did not add a surface wrapper to the calculator pages' pre-submit placeholder text - see
+  Elevation consistency above.
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content &&
+  npm test && npm run build`. 268 unit tests passing (2 new: the composed single-disclaimer
+  regression test and the layout's "does NOT render its own disclaimer" test).
+- `npm run test:e2e`: full suite green, 41/41 (38 pre-existing + 3 new in
+  `mobile-nav.spec.ts`), including the axe accessibility scans and the fixed
+  `tips-article.spec.ts` assertion.
+- Regenerated all 16 `e2e/screenshots/audit/*.png` via `audit-screenshots.spec.ts` - the three
+  mobile captures changed the most (now show the top bar/hamburger instead of bare content), the
+  three calculator and wizard captures show non-pill inputs and card-wrapped forms, and
+  `tips-article.png` now shows exactly one disclaimer.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

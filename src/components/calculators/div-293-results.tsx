@@ -23,7 +23,7 @@ export function Div293Results({ data }: { data: Div293Result }) {
   const state = stateFor(data);
 
   return (
-    <Card aria-live="polite" role="region" aria-label="Calculator results">
+    <Card variant="elevated" aria-live="polite" role="region" aria-label="Calculator results">
       <CardHeader>
         <CardTitle>Estimated results — FY{data.financialYear}</CardTitle>
       </CardHeader>

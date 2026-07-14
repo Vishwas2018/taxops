@@ -20,7 +20,7 @@ function perWeek(annual: number): number {
 
 export function PropertyCashFlowResults({ data }: { data: PropertyCashFlowResult }) {
   return (
-    <Card aria-live="polite" role="region" aria-label="Calculator results">
+    <Card variant="elevated" aria-live="polite" role="region" aria-label="Calculator results">
       <CardHeader>
         <CardTitle>Estimated results — FY{data.financialYear}</CardTitle>
       </CardHeader>

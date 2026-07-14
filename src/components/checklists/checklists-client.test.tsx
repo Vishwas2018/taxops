@@ -129,11 +129,19 @@ describe("ChecklistsClient", () => {
       />,
     );
 
-    expect(screen.getByText(/0 of 1 items checked \(0% complete\)/i)).toBeInTheDocument();
+    // The percent figure is wrapped in its own `tabular-nums` span (docs/design.md), so the
+    // full sentence is split across elements - a plain string/regex match can't span that, hence
+    // the function matcher checking the paragraph's assembled textContent instead.
+    function progressText(text: string) {
+      return (_: string, element: Element | null) =>
+        element?.tagName === "P" && element.textContent === text;
+    }
+
+    expect(screen.getByText(progressText("0 of 1 items checked (0% complete)"))).toBeInTheDocument();
 
     await user.click(screen.getByRole("checkbox", { name: /invoices issued/i }));
 
-    expect(screen.getByText(/1 of 1 items checked \(100% complete\)/i)).toBeInTheDocument();
+    expect(screen.getByText(progressText("1 of 1 items checked (100% complete)"))).toBeInTheDocument();
   });
 
   it("starts from an already-checked initial state (e.g. loaded from the database)", () => {

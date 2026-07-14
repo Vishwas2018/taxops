@@ -55,7 +55,7 @@ export default async function DashboardPage() {
     <div className="space-y-8">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
 
-      <Card>
+      <Card variant="elevated">
         <CardHeader>
           <CardTitle className="text-base">Tax profile</CardTitle>
         </CardHeader>
@@ -64,7 +64,7 @@ export default async function DashboardPage() {
             <span className="text-textSecondary">
               {completeness.answered} of {completeness.total} questions answered
             </span>
-            <span className="font-medium">{completeness.percent}%</span>
+            <span className="font-medium tabular-nums">{completeness.percent}%</span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutralSubtle">
             <div
@@ -81,7 +81,7 @@ export default async function DashboardPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card variant="elevated">
         <CardHeader>
           <CardTitle className="text-base">EOFY checklist</CardTitle>
         </CardHeader>
@@ -90,7 +90,7 @@ export default async function DashboardPage() {
             <span className="text-textSecondary">
               {checklistProgress.checked} of {checklistProgress.total} items checked
             </span>
-            <span className="font-medium">{checklistProgress.percent}%</span>
+            <span className="font-medium tabular-nums">{checklistProgress.percent}%</span>
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutralSubtle">
             <div
@@ -115,7 +115,7 @@ export default async function DashboardPage() {
               highlightContractorTakeHome && calculator.href === CONTRACTOR_TAKE_HOME_HREF;
             return (
               <Link key={calculator.href} href={calculator.href}>
-                <Card variant="interactive" className="h-full">
+                <Card variant="interactive" className="h-full shadow-raised">
                   <CardHeader>
                     <div className="flex items-center gap-2">
                       <CardTitle className="text-base">{calculator.title}</CardTitle>

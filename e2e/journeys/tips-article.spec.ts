@@ -17,8 +17,10 @@ test("tips article renders FY badge, sources, and the footer disclaimer", async 
     "https://www.ato.gov.au/individuals-and-families/income-deductions-offsets-and-records/deductions-you-can-claim",
   );
 
-  // Scoped to <main>: the article layout (tips/[slug]/layout.tsx) structurally guarantees its
-  // own disclaimer around the article body, separate from the site-wide footer one in
-  // (marketing)/layout.tsx - both legitimately render on this page.
-  await expect(page.getByRole("main").getByText(/general and educational only/)).toBeVisible();
+  // Day 11.9 audit fix: the article layout (tips/[slug]/layout.tsx) used to render its own
+  // disclaimer on top of the site-wide footer one in (marketing)/layout.tsx, producing two.
+  // The no-omit guarantee now lives solely in the marketing layout (which wraps every route in
+  // the group, this one included), so exactly one should render, outside <main>.
+  await expect(page.getByText(/general and educational only/)).toHaveCount(1);
+  await expect(page.getByRole("main").getByText(/general and educational only/)).toHaveCount(0);
 });

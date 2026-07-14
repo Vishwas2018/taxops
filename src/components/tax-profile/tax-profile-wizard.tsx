@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { saveTaxProfileSectionAction } from "@/app/(app)/profile/actions";
 import { Disclaimer } from "@/components/disclaimer";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { formatAnswerLabel } from "@/lib/tax-profile/format";
 import { TAX_PROFILE_QUESTION_GROUPS, type TaxProfileInput } from "@/lib/validation/tax-profile";
 import { QuestionGroupControl } from "./question-group-control";
@@ -87,51 +88,55 @@ export function TaxProfileWizard({
         </div>
       </div>
 
-      {step < REVIEW_STEP ? (
-        <fieldset className="space-y-3">
-          <legend className="sr-only">{QUESTION_STEPS[step].title}</legend>
-          <h2 ref={headingRef} tabIndex={-1} className="text-lg font-semibold outline-none">
-            {QUESTION_STEPS[step].title}
-          </h2>
-          {QUESTION_STEPS[step].description && (
-            <p className="text-sm text-textMuted">{QUESTION_STEPS[step].description}</p>
+      <Card>
+        <CardContent>
+          {step < REVIEW_STEP ? (
+            <fieldset className="space-y-3">
+              <legend className="sr-only">{QUESTION_STEPS[step].title}</legend>
+              <h2 ref={headingRef} tabIndex={-1} className="text-lg font-semibold outline-none">
+                {QUESTION_STEPS[step].title}
+              </h2>
+              {QUESTION_STEPS[step].description && (
+                <p className="text-sm text-textMuted">{QUESTION_STEPS[step].description}</p>
+              )}
+              <QuestionGroupControl
+                group={QUESTION_STEPS[step]}
+                value={answers[QUESTION_STEPS[step].key]}
+                onChange={(value) => updateAnswer(QUESTION_STEPS[step].key, value)}
+              />
+              <p className="text-xs text-textMuted">
+                You can skip any question - Next works either way, and you can come back later.
+              </p>
+            </fieldset>
+          ) : (
+            <div className="space-y-4">
+              <h2 ref={headingRef} tabIndex={-1} className="text-lg font-semibold outline-none">
+                Review your answers
+              </h2>
+              <dl className="divide-y divide-border rounded-lg border border-border">
+                {QUESTION_STEPS.map((group, index) => (
+                  <div key={group.key} className="flex items-center justify-between gap-4 px-4 py-3">
+                    <div>
+                      <dt className="text-sm font-medium">{group.title}</dt>
+                      <dd className="text-sm text-textSecondary">
+                        {formatAnswerLabel(group, answers[group.key])}
+                      </dd>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => setStep(index)}>
+                      Edit
+                    </Button>
+                  </div>
+                ))}
+              </dl>
+              {error && (
+                <p role="alert" className="text-sm font-medium text-danger">
+                  {error}
+                </p>
+              )}
+            </div>
           )}
-          <QuestionGroupControl
-            group={QUESTION_STEPS[step]}
-            value={answers[QUESTION_STEPS[step].key]}
-            onChange={(value) => updateAnswer(QUESTION_STEPS[step].key, value)}
-          />
-          <p className="text-xs text-textMuted">
-            You can skip any question - Next works either way, and you can come back later.
-          </p>
-        </fieldset>
-      ) : (
-        <div className="space-y-4">
-          <h2 ref={headingRef} tabIndex={-1} className="text-lg font-semibold outline-none">
-            Review your answers
-          </h2>
-          <dl className="divide-y divide-border rounded-lg border border-border">
-            {QUESTION_STEPS.map((group, index) => (
-              <div key={group.key} className="flex items-center justify-between gap-4 px-4 py-3">
-                <div>
-                  <dt className="text-sm font-medium">{group.title}</dt>
-                  <dd className="text-sm text-textSecondary">
-                    {formatAnswerLabel(group, answers[group.key])}
-                  </dd>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => setStep(index)}>
-                  Edit
-                </Button>
-              </div>
-            ))}
-          </dl>
-          {error && (
-            <p role="alert" className="text-sm font-medium text-danger">
-              {error}
-            </p>
-          )}
-        </div>
-      )}
+        </CardContent>
+      </Card>
 
       <div className="flex items-center justify-between">
         <Button

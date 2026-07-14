@@ -12,6 +12,7 @@ import {
   type ContractorTakeHomeFormRawInput,
 } from "@/lib/validation/calculators";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -67,6 +68,8 @@ export function ContractorTakeHomeCalculator() {
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">
+      <Card>
+        <CardContent>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <FormField id="dayRate" label="Day rate ($)" error={errors.dayRate?.message}>
           <Input type="number" step="0.01" inputMode="decimal" {...register("dayRate")} />
@@ -135,6 +138,8 @@ export function ContractorTakeHomeCalculator() {
           Calculate
         </Button>
       </form>
+        </CardContent>
+      </Card>
 
       <div>
         {results ? (

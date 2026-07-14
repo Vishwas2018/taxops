@@ -11,6 +11,7 @@ import {
   type Div293FormRawInput,
 } from "@/lib/validation/calculators";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Div293Results } from "./div-293-results";
@@ -38,6 +39,8 @@ export function Div293Calculator() {
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">
+      <Card>
+        <CardContent>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <FormField
           id="div293Income"
@@ -65,6 +68,8 @@ export function Div293Calculator() {
           Calculate
         </Button>
       </form>
+        </CardContent>
+      </Card>
 
       <div>
         {result ? (

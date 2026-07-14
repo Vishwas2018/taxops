@@ -62,7 +62,8 @@ export function ChecklistsClient({
     <div className="space-y-6">
       <div className="space-y-2">
         <p aria-live="polite" className="text-sm font-medium text-textSecondary">
-          {overallProgress.checked} of {overallProgress.total} items checked ({overallProgress.percent}% complete)
+          {overallProgress.checked} of {overallProgress.total} items checked (
+          <span className="tabular-nums">{overallProgress.percent}</span>% complete)
         </p>
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutralSubtle">
           <div

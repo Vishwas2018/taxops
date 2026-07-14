@@ -2,17 +2,17 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { STANDARD_DISCLAIMER } from "@/lib/disclaimers";
 import { getAllArticleSlugs } from "@/lib/content/articles";
+import MarketingLayout from "../../layout";
 import TipArticleLayout from "./layout";
 import TipArticlePage, { generateMetadata, generateStaticParams } from "./page";
 
 const SLUG = "concessional-contributions-cap-explained";
 
 describe("TipArticlePage", () => {
-  it("renders the article wrapped in its layout with the disclaimer, sources, and FY badge", async () => {
+  it("renders the article wrapped in its layout with sources and FY badge", async () => {
     const content = await TipArticlePage({ params: Promise.resolve({ slug: SLUG }) });
     render(<TipArticleLayout>{content}</TipArticleLayout>);
 
-    expect(screen.getByText(STANDARD_DISCLAIMER)).toBeInTheDocument();
     expect(screen.getByText("FY2025-26")).toBeInTheDocument();
     expect(screen.getByText(/reviewed:/i)).toBeInTheDocument();
     expect(
@@ -21,6 +21,22 @@ describe("TipArticlePage", () => {
     expect(
       screen.getByRole("link", { name: /ato — concessional contributions cap/i }),
     ).toHaveAttribute("href", expect.stringContaining("ato.gov.au"));
+  });
+
+  // Regression test for the Day 11.9 audit finding: `/tips/[slug]` nests under both
+  // `(marketing)/layout.tsx` and `(marketing)/tips/[slug]/layout.tsx`, and both used to render
+  // their own footer `<Disclaimer />`, producing two identical boxed disclaimers back-to-back.
+  // Compose both layouts the way Next.js actually nests them for this route and assert exactly
+  // one survives.
+  it("renders exactly one disclaimer when composed with the parent marketing layout", async () => {
+    const content = await TipArticlePage({ params: Promise.resolve({ slug: SLUG }) });
+    render(
+      <MarketingLayout>
+        <TipArticleLayout>{content}</TipArticleLayout>
+      </MarketingLayout>,
+    );
+
+    expect(screen.getAllByText(STANDARD_DISCLAIMER)).toHaveLength(1);
   });
 
   it("renders the article title and description", async () => {

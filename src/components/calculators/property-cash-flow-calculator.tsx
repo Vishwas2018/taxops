@@ -12,6 +12,7 @@ import {
   type PropertyCashFlowFormRawInput,
 } from "@/lib/validation/calculators";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { PropertyCashFlowResults } from "./property-cash-flow-results";
@@ -85,6 +86,8 @@ export function PropertyCashFlowCalculator({
 
   return (
     <div className="grid gap-8 lg:grid-cols-2">
+      <Card>
+        <CardContent>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
         <FormField id="weeklyRent" label="Weekly rent ($)" error={errors.weeklyRent?.message}>
           <Input type="number" step="1" inputMode="decimal" {...register("weeklyRent")} />
@@ -165,7 +168,7 @@ export function PropertyCashFlowCalculator({
           error={errors.marginalTaxRate?.message}
         >
           <select
-            className="flex h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="flex h-8 w-full rounded-sm border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             {...register("marginalTaxRate")}
           >
             {MARGINAL_RATE_OPTIONS.map((option) => (
@@ -180,6 +183,8 @@ export function PropertyCashFlowCalculator({
           Calculate
         </Button>
       </form>
+        </CardContent>
+      </Card>
 
       <div>
         {result ? (

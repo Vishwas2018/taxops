@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Disclaimer } from "@/components/disclaimer";
 import { AppSidebar } from "@/components/nav/app-sidebar";
+import { MobileNav } from "@/components/nav/mobile-nav";
 import { UserMenu } from "@/components/nav/user-menu";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,7 +27,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <AppSidebar />
       </aside>
       <div className="flex flex-1 flex-col">
-        <header className="flex items-center justify-end border-b px-6 py-3">
+        <header className="flex items-center justify-between border-b px-4 py-3 md:justify-end md:px-6">
+          <div className="flex items-center gap-2 md:hidden">
+            <MobileNav />
+            <Link href="/" className="text-lg font-semibold">
+              TaxOps
+            </Link>
+          </div>
           <UserMenu email={user.email ?? ""} />
         </header>
         <main className="flex-1 px-6 py-8">{children}</main>
