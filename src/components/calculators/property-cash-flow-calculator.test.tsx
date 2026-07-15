@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { PropertyCashFlowCalculator } from "./property-cash-flow-calculator";
@@ -7,6 +7,10 @@ async function setField(user: ReturnType<typeof userEvent.setup>, label: RegExp,
   const input = screen.getByLabelText(label);
   await user.clear(input);
   await user.type(input, value);
+}
+
+function resultsRegion() {
+  return screen.getByRole("region", { name: /calculator results/i });
 }
 
 describe("PropertyCashFlowCalculator", () => {
@@ -26,12 +30,22 @@ describe("PropertyCashFlowCalculator", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/cannot exceed 52 weeks/i);
   });
 
-  it("integration: wires the form through the engine to a rendered breakdown, negatively geared", async () => {
+  it("defaults the financial year selector to FY2026-27", () => {
+    render(<PropertyCashFlowCalculator />);
+    const select = screen.getByLabelText(/^financial year/i) as HTMLSelectElement;
+    expect(select.value).toBe("2026-27");
+  });
+
+  it("integration: wires the form through the engine to a rendered breakdown, negatively geared, defaulting to FY2026-27", async () => {
     // Default form values: $550/week rent, 2 vacancy weeks (50 weeks let) = $27,500 rent;
     // expenses $2,500+$1,500+$2,200+$1,800 = $8,000; $22,000 interest; $6,000 depreciation;
     // 30% marginal rate. netRentalResult = 27,500 - 8,000 - 22,000 - 6,000 = -$8,500 (loss).
     // cashOnlyResult (excludes depreciation) = 27,500 - 8,000 - 22,000 = -$2,500.
-    // taxEffect = -(-8,500) * 0.30 = $2,550. afterTaxCashFlow = -2,500 + 2,550 = $50.
+    // taxEffect = -(-8,500) * 0.30 = $2,550. afterTaxCashFlow = -2,500 + 2,550 = $50. None of
+    // these figures depend on which FY config is selected (the caller supplies the marginal
+    // rate directly - see calculatePropertyCashFlow's own doc comment), so they're identical
+    // on both FY2025-26 and FY2026-27; only the FY badge and the marginal-rate option labels
+    // (see the selector test below) actually change with the selection.
     const user = userEvent.setup();
     render(<PropertyCashFlowCalculator />);
     await user.click(screen.getByRole("button", { name: /calculate/i }));
@@ -40,7 +54,28 @@ describe("PropertyCashFlowCalculator", () => {
     expect(screen.getByText("$2,550")).toBeInTheDocument();
     expect(screen.getByText("$50")).toBeInTheDocument();
     expect(screen.getByText(/negatively geared/i)).toBeInTheDocument();
-    expect(screen.getByText(/FY2025-26/)).toBeInTheDocument();
+    expect(within(resultsRegion()).getByText(/FY2026-27/)).toBeInTheDocument();
+  });
+
+  it("integration: switching the FY selector swaps the config and badge, and relabels the second bracket's marginal-rate option", async () => {
+    const user = userEvent.setup();
+    render(<PropertyCashFlowCalculator />);
+
+    // FY2026-27's second bracket is cut to 15% (from FY2025-26's 16%) - the option label
+    // itself is derived from config.incomeTaxBrackets, not a hardcoded string.
+    expect(screen.getByRole("option", { name: /15% \(\$18,200-\$45,000\)/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /16% \(\$18,200-\$45,000\)/ }),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText(/^financial year/i), "2025-26");
+    await user.click(screen.getByRole("button", { name: /calculate/i }));
+
+    expect(screen.getByRole("option", { name: /16% \(\$18,200-\$45,000\)/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("option", { name: /15% \(\$18,200-\$45,000\)/ }),
+    ).not.toBeInTheDocument();
+    expect(within(resultsRegion()).getByText(/FY2025-26/)).toBeInTheDocument();
   });
 
   it("prefills the marginal rate from a profile-derived suggestion, labeled and still editable", async () => {

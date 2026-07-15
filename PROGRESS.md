@@ -2361,6 +2361,162 @@ not a new compliance-checking system.
 - Regenerated `e2e/screenshots/audit/*.png` (nav changed) - mobile captures now show "Tax
   Dates" in the sheet; desktop dashboard shows the new "Next key date" line.
 
+## Day 15 — FY2026-27 config + surface anchoring (2026-07-15)
+
+### Part A: `fy2026-27.ts` TaxYearConfig
+
+`src/lib/tax-config/fy2026-27.ts` sits alongside `fy2025-26.ts`, not in place of it (per
+`docs/updating-tax-data.md`'s own procedure). Built against the Day 13.5 reform package's 1 July
+2026 commencements: the second income-tax bracket cut 16%→15% (Income Tax Rates Amendment (Tax
+Reform No. 1) Act 2026, No. 50/2026) and the new $1,000 standard work-related deduction - the
+latter added as **config-only data** (`standardWorkRelatedDeduction` on `TaxYearConfig`, new
+optional field since no earlier config year has it): its eligibility rule (PAYG
+employment/labour income only, not ABN/self-employed or investment income) excludes it from
+every existing calculator, all of which model day-rate ABN/contractor income, so no engine wires
+it in yet - deliberate, not an oversight.
+
+Carried forward unchanged from FY2025-26 (cross-verified, not assumed): GST rate/threshold,
+LITO, SG rate, Division 293 threshold/rate. Indexed: HELP/STSL thresholds ($69,528/$129,717/
+$186,050, up from $67,000/... - the exact figures Day 3.5's own near-miss writeup flagged as
+"the actually-FY2026-27 thresholds" when researching FY2025-26, correctly used here) and the
+concessional contributions cap ($32,500, up from $30,000). Medicare low-income thresholds are
+**carried forward from FY2025-26 with `pendingIndexation: true`** (a new `SourcedValue` flag,
+distinct from `verified: false`) - the ATO had not yet gazetted FY2026-27's own indexed figures
+at the time this file was built; flagged explicitly as a placeholder rather than guessed at.
+
+`fy2026-27.test.ts` sanity-checks every carried-forward/changed value against `fy2025_26`
+directly (not just against a hand-written expectation) and includes golden files for
+`calculateIncomeTax`, `calculateHelpRepayment`, and `calculateDiv293` against the new config,
+each hand-computed independently before running, per this project's standing golden-file
+discipline.
+
+**Gate 3 sign-off table** (presented for human review; signed off before Part B proceeded):
+
+| Value | Status | Note |
+|---|---|---|
+| Second-bracket rate cut (16%→15%) | Verified | Federal Register (Act No. 50/2026) + 5 independent secondary sources |
+| HELP/STSL thresholds | Verified | 5 independent secondary sources (ato.gov.au 403-blocked) |
+| Concessional contributions cap ($32,500) | Verified | ato.gov.au (superannuation rates page) |
+| Medicare low-income thresholds | **Not verified - `pendingIndexation`** | FY2025-26 figures carried forward; ATO gazettes later in the FY |
+| Standard work-related deduction ($1,000) | Verified | Budget 2026-27 factsheet, read in full (primary source) |
+| Standard deduction eligibility scope (excludes ABN/investment income) | **Lower confidence** | Not found verbatim in the primary factsheet; 2 secondary sources agree |
+
+Gate 3 signed off by the human at the end of Part A - Part B (below) proceeds on that basis.
+
+### Part B: Surface anchoring
+
+**`docs/updating-tax-data.md`**: new §7 documents which surface defaults to which financial
+year (see the table below) so a future change has one place to check what it's overriding. New
+"Looking ahead: FY2027-28" note flags two already-legislated FY2027-28 changes without building
+a config for them - a further second-bracket cut 15%→14% (Cost of Living Tax Cuts Act 2025) and
+WATO's commencement (named at this task's own Gate 3 sign-off, not yet independently researched
+here) - both to be click-verified against the Federal Register/ATO when `fy2027-28.ts` is
+actually built, not assumed still current at that point.
+
+**Surface classification** (`src/lib/tax-config/index.ts` adds `TAX_YEAR_CONFIGS`,
+`SELECTABLE_FINANCIAL_YEARS`, `DEFAULT_SELECTABLE_FINANCIAL_YEAR` for the selector surfaces
+below; the other two groups keep importing `fy2025_26`/`fy2026_27` directly, per
+`docs/updating-tax-data.md`'s existing "no single switchover point" note):
+
+| Group | Surfaces | Behaviour |
+|---|---|---|
+| Forward-looking | `tax-set-aside`, `gst-threshold` | FY2026-27 only, no selector - these plan for money not yet earned |
+| Retrospective | `/tax-dates` FY2025-26 rows, EOFY checklists | Unchanged, FY2025-26 (checklists aren't FY-aware at all) |
+| Both years relevant | `contractor-take-home`, `property-cash-flow`, `division293` | FY2026-27 default, explicit `FinancialYearSelect` |
+
+A shared `FinancialYearSelect` (`src/components/calculators/financial-year-select.tsx`) - a
+native `<select>` in the same styled pattern `property-cash-flow-calculator.tsx` already used
+for its marginal-rate dropdown, not a new UI pattern - is reused across the three selector
+surfaces rather than three separate implementations. Switching it swaps the `TaxYearConfig`
+passed to the engine; the FY badge (`Estimated results — FY{result.financialYear}`) already
+read directly off the engine's own return value on every calculator, so it updates for free
+with no separate display-state to keep in sync. `property-cash-flow-calculator.tsx`'s
+marginal-rate option list, previously a module-scope constant built from `fy2025_26`, is now a
+`useMemo` keyed on the selected year (`marginalRateOptionsFor`), since the second bracket's own
+rate label (16% vs 15%) differs between the two configs. `property-cash-flow/page.tsx`'s
+server-side suggested-marginal-rate lookup now uses `fy2026_27` to match the calculator's own
+new default (a no-op on the actual suggested rate for every household-income band, since none of
+them fall in the bracket whose rate changed - documented as a deliberate non-change, not missed).
+
+**Tax dates FY2026-27** (`src/lib/tax-config/key-dates-2026-27.ts`, alongside, not replacing,
+`key-dates.ts`): FY start/end, the individual lodgment self/agent-extension pair (31 October
+2026 / 15 May 2027), a single **Payday Super** entry (SG must generally reach the employee's
+super fund within 7 business days of each payday from 1 July 2026, replacing the quarterly
+system - click-verified via ATO's own "Payment deadlines for Payday Super" page, cross-checked
+against an independent secondary source), and BAS/PAYG instalment quarters. **Deliberately no
+quarterly super guarantee rows** - Payday Super replaces them from this FY's own start date;
+FY2025-26's Q4 SG row (28 July 2026, in `key-dates.ts`) is correctly the last one under the old
+system. Every date click-verified, including a real catch: the naive Q2 due date (28 February
+2027) is a Sunday, so the ATO's weekend-shift rule moves it to **1 March 2027** - confirmed via
+two independent secondary sources, not assumed from the flat 28th-of-month pattern the FY2025-26
+file uses (that file's own Q2 date, 28 February 2026, is also technically a Saturday under the
+same rule - noted here as an observation, not fixed, since revisiting FY2025-26's dates is
+outside this task's scope).
+
+A new `KeyDateAudience` value, `"everyone-with-employer"`, was added (with a validation-schema
+and `AUDIENCE_LABELS` update) for the Payday Super chip - narrower than `"everyone"` (doesn't
+apply to a purely self-employed contractor with no employees) but broader than `"contractor"`/
+`"property-investor"`, so a new value was warranted rather than overloading an existing one.
+
+`/tax-dates` and the dashboard's "next key date" line now read a merged
+`[...KEY_DATES_2025_26, ...KEY_DATES_2026_27]` array instead of FY2025-26 alone, so both the
+quarter-grouped timeline and `findNextUpcomingKeyDate` keep working across the FY boundary
+instead of the timeline running out of data and the dashboard line silently disappearing once
+every FY2025-26 date has passed (the exact "FY rollover, no next-FY data yet" case
+`docs/updating-tax-data.md` had flagged as expected-until-fixed on Day 14).
+
+**Golden files reconfirmed under FY2026-27, not ported**: `tax-set-aside.test.ts` and
+`gst-threshold.test.ts` each gained a new describe block computed independently against
+`fy2026_27` (the $100k/$200k set-aside golden files recomputed for the 15% second bracket;
+the GST-threshold crossing-week golden files' dollar figures unchanged - the $75,000 threshold
+itself didn't move - but their calendar-month outputs independently recomputed via the same
+`node -e` date-arithmetic method Day 14 used, since FY2026-27 starts a full year later).
+
+### Tests added/updated
+
+- Per-surface default assertions: each of the 5 calculators asserts its default financial year
+  (FY2026-27 for all five, via either a fixed config import or the selector's default state).
+- Selector-switch integration tests (`contractor-take-home`, `div-293`, `property-cash-flow`):
+  each confirms the selector actually swaps the engine's config and re-renders both the FY badge
+  and the numeric results, not just a label - `div-293`'s switch test deliberately uses
+  contributions ($33,000) that exceed both years' concessional cap so the cap difference
+  ($32,500 vs $30,000, $4,875 vs $4,500) is actually exercised, not masked by a scenario both
+  years would answer identically.
+- `key-dates-2026-27.test.ts`: schema/uniqueness/date-range checks (same shape as
+  `key-dates.test.ts`), plus an explicit assertion that no `super-guarantee*` id exists in the
+  FY2026-27 array, a Payday Super shape/content check, and the Q2 weekend-shift date.
+- `tax-dates/page.test.tsx`: FY2026-27's quarter headings and Payday Super entry render
+  alongside FY2025-26's, with an explicit count assertion (8 matches = FY2025-26's 4 rows'
+  title+description pairs, not more) that the merged timeline doesn't grow any new super
+  guarantee rows from FY2026-27.
+- `tax-dates/derived.test.ts`: three new real-dataset tests exercising
+  `findNextUpcomingKeyDate` across the actual FY2025-26/FY2026-27 boundary - one showing the
+  merged array finds FY2026-27's earliest entry once every FY2025-26 date has passed (where
+  FY2025-26 alone would return `null`), one confirming that `null` explicitly as the contrast,
+  and one confirming a same-day tie (`fy-start`/`payday-super`, both 1 July 2026) resolves
+  correctly.
+
+### Deviations
+
+- Noticed but did not fix: FY2025-26's own Q2 BAS/PAYGI due date (28 February 2026) is also a
+  Saturday under the same ATO weekend-shift rule this task applied to FY2026-27's Q2 - out of
+  this task's scope (FY2026-27 anchoring only), flagged here rather than silently left for a
+  future day to rediscover.
+- Did not add per-selected-year recomputation of `property-cash-flow`'s server-derived suggested
+  marginal rate (it stays computed once, against `fy2026_27`, regardless of which year the user
+  then selects in the client). Checked first: every household-income band's representative
+  income falls in a bracket whose rate is identical across both configs (only the second
+  bracket, 16%→15%, changed, and no band's representative income falls there), so this has zero
+  behavioural effect today - revisit only if a future FY actually changes a bracket a suggested
+  band relies on.
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content &&
+  npm run test:coverage && npm run build`. 364 tests, 100% coverage on
+  `src/lib/calculators/**`.
+- `npm run test:e2e`: full suite green.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

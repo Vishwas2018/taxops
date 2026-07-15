@@ -6,6 +6,7 @@ import { CALCULATORS } from "@/app/(app)/calculators/page";
 import { FEATURES } from "@/app/(marketing)/page";
 import { CHECKLIST_GROUPS } from "@/lib/checklists/templates";
 import { ARTICLE_CATEGORIES } from "@/lib/content/schema";
+import { KEY_DATES_2026_27 } from "@/lib/tax-config/key-dates-2026-27";
 import { KEY_DATES_2025_26 } from "@/lib/tax-config/key-dates";
 import { TAX_PROFILE_QUESTION_GROUPS } from "@/lib/validation/tax-profile";
 
@@ -105,7 +106,7 @@ describe("UI copy audit: calculator cards, tax-profile questions, checklist temp
       }
     }
 
-    for (const entry of KEY_DATES_2025_26) {
+    for (const entry of [...KEY_DATES_2025_26, ...KEY_DATES_2026_27]) {
       copy.push({ where: `key date "${entry.id}" title`, text: entry.title });
       copy.push({ where: `key date "${entry.id}" description`, text: entry.description });
     }

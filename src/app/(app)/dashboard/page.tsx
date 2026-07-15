@@ -9,8 +9,14 @@ import { getDefaultChecklistGroupIds } from "@/lib/checklists/select";
 import { CHECKLIST_GROUPS } from "@/lib/checklists/templates";
 import { CATEGORY_LABELS } from "@/lib/content/schema";
 import { createClient } from "@/lib/supabase/server";
+import { KEY_DATES_2026_27 } from "@/lib/tax-config/key-dates-2026-27";
 import { KEY_DATES_2025_26 } from "@/lib/tax-config/key-dates";
 import { findNextUpcomingKeyDate } from "@/lib/tax-dates/derived";
+
+// Both financial years' entries, so "next key date" keeps working across the FY2025-26 ->
+// FY2026-27 boundary instead of returning null once every FY2025-26 date has passed - see
+// docs/updating-tax-data.md.
+const ALL_KEY_DATES = [...KEY_DATES_2025_26, ...KEY_DATES_2026_27];
 import { getTaxProfile } from "@/lib/tax-profile/data";
 import {
   computeProfileCompleteness,
@@ -47,7 +53,7 @@ export default async function DashboardPage() {
   const completeness = computeProfileCompleteness(profile);
   const relevantCategories = getRelevantTipCategories(profile);
   const highlightContractorTakeHome = isContractorLikeArrangement(profile.workArrangement);
-  const nextKeyDate = findNextUpcomingKeyDate(KEY_DATES_2025_26);
+  const nextKeyDate = findNextUpcomingKeyDate(ALL_KEY_DATES);
 
   const [checklistItemStates, checklistCustomItems] = await Promise.all([
     getChecklistItemStates(supabase, user.id),

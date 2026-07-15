@@ -5,7 +5,11 @@ import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { calculateContractorTakeHome } from "@/lib/calculators/contractor-take-home";
 import { calculateHelpRepayment } from "@/lib/calculators/help-repayment";
-import { fy2025_26 } from "@/lib/tax-config/fy2025-26";
+import {
+  DEFAULT_SELECTABLE_FINANCIAL_YEAR,
+  TAX_YEAR_CONFIGS,
+  type SelectableFinancialYear,
+} from "@/lib/tax-config";
 import {
   contractorTakeHomeFormSchema,
   type ContractorTakeHomeFormInput,
@@ -17,6 +21,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { FinancialYearSelect } from "./financial-year-select";
 import {
   ContractorTakeHomeResults,
   type ContractorTakeHomeResultsData,
@@ -31,6 +36,9 @@ const DEFAULT_VALUES: ContractorTakeHomeFormRawInput = {
 };
 
 export function ContractorTakeHomeCalculator() {
+  const [financialYear, setFinancialYear] = useState<SelectableFinancialYear>(
+    DEFAULT_SELECTABLE_FINANCIAL_YEAR,
+  );
   const [results, setResults] = useState<ContractorTakeHomeResultsData | null>(null);
 
   const {
@@ -44,6 +52,7 @@ export function ContractorTakeHomeCalculator() {
   });
 
   function onSubmit(values: ContractorTakeHomeFormInput) {
+    const config = TAX_YEAR_CONFIGS[financialYear];
     const takeHome = calculateContractorTakeHome(
       {
         dayRate: values.dayRate,
@@ -51,13 +60,13 @@ export function ContractorTakeHomeCalculator() {
         weeksWorkedPerYear: values.weeksWorkedPerYear,
         superTreatment: values.superTreatment,
       },
-      fy2025_26,
+      config,
     );
 
     // HELP repayment income isn't modeled separately in this calculator - assessable
     // income is used as an approximation. See the assumption surfaced in the results panel.
     const help = values.hasHelpDebt
-      ? calculateHelpRepayment(takeHome.assessableIncome, fy2025_26)
+      ? calculateHelpRepayment(takeHome.assessableIncome, config)
       : null;
 
     const finalNetAnnual = takeHome.netTakeHome - (help?.repaymentAmount ?? 0);
@@ -71,6 +80,12 @@ export function ContractorTakeHomeCalculator() {
       <Card>
         <CardContent>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <FinancialYearSelect
+          id="financialYear"
+          value={financialYear}
+          onChange={setFinancialYear}
+        />
+
         <FormField id="dayRate" label="Day rate ($)" error={errors.dayRate?.message}>
           <Input type="number" step="0.01" inputMode="decimal" {...register("dayRate")} />
         </FormField>

@@ -1,11 +1,16 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { calculatePropertyCashFlow } from "@/lib/calculators/property-cash-flow";
 import type { PropertyCashFlowResult } from "@/lib/calculators/property-cash-flow";
-import { fy2025_26 } from "@/lib/tax-config/fy2025-26";
+import type { TaxBracket, TaxYearConfig } from "@/lib/tax-config/types";
+import {
+  DEFAULT_SELECTABLE_FINANCIAL_YEAR,
+  TAX_YEAR_CONFIGS,
+  type SelectableFinancialYear,
+} from "@/lib/tax-config";
 import {
   propertyCashFlowFormSchema,
   type PropertyCashFlowFormInput,
@@ -15,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
+import { FinancialYearSelect } from "./financial-year-select";
 import { PropertyCashFlowResults } from "./property-cash-flow-results";
 
 const DEFAULT_VALUES: PropertyCashFlowFormRawInput = {
@@ -32,13 +38,17 @@ const DEFAULT_VALUES: PropertyCashFlowFormRawInput = {
 // This UI asks the investor to pick their marginal rate directly (from the same brackets
 // calculateIncomeTax uses) rather than entering their whole taxable income - a single bracket
 // rate covers a wide income range, so there's no one "right" income value to derive it from.
-const MARGINAL_RATE_OPTIONS = fy2025_26.incomeTaxBrackets.value.map((bracket) => ({
-  rate: bracket.rate,
-  label:
-    bracket.max === null
-      ? `${Math.round(bracket.rate * 100)}% (over $${bracket.min.toLocaleString()})`
-      : `${Math.round(bracket.rate * 100)}% ($${bracket.min.toLocaleString()}-$${bracket.max.toLocaleString()})`,
-}));
+// Recomputed per selected financial year (not a module-scope constant) since the second
+// bracket's rate itself differs between FY2025-26 (16%) and FY2026-27 (15%).
+function marginalRateOptionsFor(config: TaxYearConfig) {
+  return config.incomeTaxBrackets.value.map((bracket: TaxBracket) => ({
+    rate: bracket.rate,
+    label:
+      bracket.max === null
+        ? `${Math.round(bracket.rate * 100)}% (over $${bracket.min.toLocaleString()})`
+        : `${Math.round(bracket.rate * 100)}% ($${bracket.min.toLocaleString()}-$${bracket.max.toLocaleString()})`,
+  }));
+}
 
 export function PropertyCashFlowCalculator({
   suggestedMarginalRate = null,
@@ -50,7 +60,15 @@ export function PropertyCashFlowCalculator({
   suggestedMarginalRate?: number | null;
   incomeBandLabel?: string | null;
 }) {
+  const [financialYear, setFinancialYear] = useState<SelectableFinancialYear>(
+    DEFAULT_SELECTABLE_FINANCIAL_YEAR,
+  );
   const [result, setResult] = useState<PropertyCashFlowResult | null>(null);
+
+  const marginalRateOptions = useMemo(
+    () => marginalRateOptionsFor(TAX_YEAR_CONFIGS[financialYear]),
+    [financialYear],
+  );
 
   const {
     register,
@@ -79,7 +97,7 @@ export function PropertyCashFlowCalculator({
           annualDepreciation: values.annualDepreciation,
           marginalTaxRate: values.marginalTaxRate,
         },
-        fy2025_26,
+        TAX_YEAR_CONFIGS[financialYear],
       ),
     );
   }
@@ -89,6 +107,12 @@ export function PropertyCashFlowCalculator({
       <Card>
         <CardContent>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <FinancialYearSelect
+          id="financialYear"
+          value={financialYear}
+          onChange={setFinancialYear}
+        />
+
         <FormField id="weeklyRent" label="Weekly rent ($)" error={errors.weeklyRent?.message}>
           <Input type="number" step="1" inputMode="decimal" {...register("weeklyRent")} />
         </FormField>
@@ -171,7 +195,7 @@ export function PropertyCashFlowCalculator({
             className="flex h-8 w-full rounded-sm border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             {...register("marginalTaxRate")}
           >
-            {MARGINAL_RATE_OPTIONS.map((option) => (
+            {marginalRateOptions.map((option) => (
               <option key={option.rate} value={option.rate}>
                 {option.label}
               </option>

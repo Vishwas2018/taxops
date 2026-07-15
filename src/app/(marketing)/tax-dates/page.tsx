@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Disclaimer } from "@/components/disclaimer";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { KEY_DATES_2026_27 } from "@/lib/tax-config/key-dates-2026-27";
 import { KEY_DATES_2025_26 } from "@/lib/tax-config/key-dates";
 import {
   AUDIENCE_LABELS,
@@ -10,6 +11,10 @@ import {
 } from "@/lib/tax-dates/derived";
 
 export const metadata: Metadata = { title: "Tax Dates — TaxOps" };
+
+// Both financial years' entries, shown chronologically in one timeline - FY2026-27 was added
+// alongside FY2025-26 on Day 15, not in place of it (see docs/updating-tax-data.md).
+const ALL_KEY_DATES = [...KEY_DATES_2025_26, ...KEY_DATES_2026_27];
 
 function formatDate(date: string): string {
   return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-AU", {
@@ -21,15 +26,15 @@ function formatDate(date: string): string {
 }
 
 export default function TaxDatesPage() {
-  const nextUpcoming = findNextUpcomingKeyDate(KEY_DATES_2025_26);
-  const groups = groupKeyDatesByQuarter(KEY_DATES_2025_26);
+  const nextUpcoming = findNextUpcomingKeyDate(ALL_KEY_DATES);
+  const groups = groupKeyDatesByQuarter(ALL_KEY_DATES);
 
   return (
     <div className="mx-auto max-w-3xl px-6 py-16">
       <h1 className="text-2xl font-semibold">Tax Dates</h1>
       <p className="mt-2 text-muted-foreground">
-        Key FY2025-26 dates for lodgment, activity statements, super guarantee, and PAYG
-        instalments - a static reference, not a reminder service.
+        Key FY2025-26 and FY2026-27 dates for lodgment, activity statements, Payday Super, and
+        PAYG instalments - a static reference, not a reminder service.
       </p>
 
       <div className="mt-6">

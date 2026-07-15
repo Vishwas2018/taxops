@@ -48,17 +48,20 @@ describe("TaxSetAsideCalculator", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/cannot exceed 7 days/i);
   });
 
-  it("integration: wires the form through the engine to a rendered breakdown", async () => {
-    // Same inputs as tax-set-aside.test.ts's $100,000 golden file: $500/day, 4 days/week,
-    // 50 weeks/year -> $22,788 estimated income tax, no HELP line shown. With no HELP debt,
+  it("integration: wires the form through the engine to a rendered breakdown, defaulting to FY2026-27", async () => {
+    // Same inputs as fy2026-27.test.ts's $100,000 golden scenario: $500/day, 4 days/week,
+    // 50 weeks/year. Independently recomputed for FY2026-27's 15% (not FY2025-26's 16%)
+    // second bracket: $0 (0-18,200) + $4,020 (15% of $26,800) + $16,500 (30% of $55,000) =
+    // $20,520 gross tax; LITO $0; Medicare 2% of $100,000 = $2,000; net tax $22,520 - exactly
+    // $268 less than FY2025-26's $22,788 golden file at the same income. With no HELP debt,
     // the suggested set-aside total equals income tax exactly, so both figures render as
-    // "$22,788" - hence asserting two matches, not one.
+    // "$22,520" - hence asserting two matches, not one.
     const user = userEvent.setup();
     render(<TaxSetAsideCalculator />);
     await fillAndSubmit(user, { dayRate: "500", daysPerWeek: "4", weeksPerYear: "50" });
 
-    expect(await screen.findAllByText("$22,788")).toHaveLength(2);
-    expect(screen.getByText(/FY2025-26/)).toBeInTheDocument();
+    expect(await screen.findAllByText("$22,520")).toHaveLength(2);
+    expect(screen.getByText(/FY2026-27/)).toBeInTheDocument();
     expect(screen.queryByText(/estimated help\/stsl repayment/i)).not.toBeInTheDocument();
     expect(screen.getByText(/not registered/i)).toBeInTheDocument();
   });

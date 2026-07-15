@@ -4,7 +4,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { calculateDiv293, type Div293Result } from "@/lib/calculators/div293";
-import { fy2025_26 } from "@/lib/tax-config/fy2025-26";
+import {
+  DEFAULT_SELECTABLE_FINANCIAL_YEAR,
+  TAX_YEAR_CONFIGS,
+  type SelectableFinancialYear,
+} from "@/lib/tax-config";
 import {
   div293FormSchema,
   type Div293FormInput,
@@ -15,6 +19,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
 import { Div293Results } from "./div-293-results";
+import { FinancialYearSelect } from "./financial-year-select";
 
 const DEFAULT_VALUES: Div293FormRawInput = {
   div293Income: 240_000,
@@ -22,6 +27,9 @@ const DEFAULT_VALUES: Div293FormRawInput = {
 };
 
 export function Div293Calculator() {
+  const [financialYear, setFinancialYear] = useState<SelectableFinancialYear>(
+    DEFAULT_SELECTABLE_FINANCIAL_YEAR,
+  );
   const [result, setResult] = useState<Div293Result | null>(null);
 
   const {
@@ -34,7 +42,7 @@ export function Div293Calculator() {
   });
 
   function onSubmit(values: Div293FormInput) {
-    setResult(calculateDiv293(values, fy2025_26));
+    setResult(calculateDiv293(values, TAX_YEAR_CONFIGS[financialYear]));
   }
 
   return (
@@ -42,6 +50,12 @@ export function Div293Calculator() {
       <Card>
         <CardContent>
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+        <FinancialYearSelect
+          id="financialYear"
+          value={financialYear}
+          onChange={setFinancialYear}
+        />
+
         <FormField
           id="div293Income"
           label="Income for Division 293 purposes ($)"

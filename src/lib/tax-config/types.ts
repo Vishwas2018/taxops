@@ -16,6 +16,12 @@ export interface SourcedValue<T> {
   source: string;
   verified: boolean;
   note?: string;
+  /** True when `value` is last-year's figure carried forward because this year's indexed
+   * figure has not yet been gazetted (distinct from `verified: false`, which can also mean
+   * "not yet independently re-checked" for a value that already exists) - added for Day 15's
+   * FY2026-27 Medicare low-income thresholds, gazetted later in the financial year than this
+   * config is built. See `docs/updating-tax-data.md`. */
+  pendingIndexation?: boolean;
 }
 
 export interface TaxYearConfig {
@@ -66,13 +72,37 @@ export interface TaxYearConfig {
      * the marginal bands - this is the "cap" the marginal system phases into. */
     cap: SourcedValue<{ threshold: number; rate: number }>;
   };
+  /**
+   * New value class, first present from FY2026-27 (the $1,000 standard/"instant" deduction
+   * for work-related expenses, commencing 1 July 2026) - optional because no earlier
+   * `TaxYearConfig` (e.g. `fy2025-26.ts`) has it, not because it's optional within a year that
+   * does. Config-only as of Day 15: `eligibilityNote` documents that it applies to PAYG
+   * employment/labour income only (not self-employed/ABN business income or investment
+   * income), which is why no calculator in `lib/calculators/` (all of which model day-rate
+   * ABN/contractor income) wires it in yet - see PROGRESS.md's Day 15 entry for the reasoning
+   * behind that decision, made explicitly rather than left implicit.
+   */
+  standardWorkRelatedDeduction?: {
+    amount: SourcedValue<number>;
+    eligibilityNote: string;
+  };
 }
 
 /** Who a `KeyDate` entry is typically relevant to - reuses the same "contractor / property
  * investor" vocabulary as the rest of the app (see `isContractorLikeArrangement` and
  * `getRelevantTipCategories` in `lib/tax-profile/derived.ts`) rather than inventing new terms,
- * displayed as chips rather than used to filter the timeline in v1. */
-export type KeyDateAudience = "everyone" | "contractor" | "property-investor";
+ * displayed as chips rather than used to filter the timeline in v1.
+ *
+ * `"everyone-with-employer"` was added on Day 15 for the FY2026-27 Payday Super entry
+ * (`key-dates-2026-27.ts`) - narrower than `"everyone"` (an employer-paid SG obligation doesn't
+ * apply to a purely self-employed ABN contractor with no employees), but broader than
+ * `"contractor"` or `"property-investor"`, so a new value was added rather than overloading
+ * either existing one. */
+export type KeyDateAudience =
+  | "everyone"
+  | "contractor"
+  | "property-investor"
+  | "everyone-with-employer";
 
 /**
  * One entry in the static tax-dates timeline (`lib/tax-config/key-dates.ts`). Not part of

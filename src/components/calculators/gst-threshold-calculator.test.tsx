@@ -54,9 +54,11 @@ describe("GstThresholdCalculator", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/cannot exceed 7 days/i);
   });
 
-  it("integration: a below-threshold projection shows the optional-registration framing", async () => {
+  it("integration: a below-threshold projection shows the optional-registration framing, defaulting to FY2026-27", async () => {
     // Same inputs as gst-threshold.test.ts's well-below golden file: $400/day, 3 days/week,
-    // 46 weeks/year -> $55,200 projected, $19,800 margin below the $75,000 threshold.
+    // 46 weeks/year -> $55,200 projected, $19,800 margin below the $75,000 threshold. The
+    // $75,000 registration threshold is unchanged between FY2025-26 and FY2026-27, so these
+    // dollar figures are identical either way - only the FY badge differs.
     const user = userEvent.setup();
     render(<GstThresholdCalculator />);
     await fillAndSubmit(user, { dayRate: "400", daysPerWeek: "3", weeksWorkedPerYear: "46" });
@@ -65,18 +67,20 @@ describe("GstThresholdCalculator", () => {
     expect(screen.getByText(/stay below the threshold by about/i)).toBeInTheDocument();
     expect(screen.getByText("$19,800")).toBeInTheDocument();
     expect(screen.getByText(/isn.t mandatory/i)).toBeInTheDocument();
-    expect(screen.getByText(/FY2025-26/)).toBeInTheDocument();
+    expect(screen.getByText(/FY2026-27/)).toBeInTheDocument();
   });
 
-  it("integration: a crossing projection shows the 21-day registration obligation framing", async () => {
+  it("integration: a crossing projection shows the 21-day registration obligation framing, FY2026-27's crossing month", async () => {
     // Same inputs as gst-threshold.test.ts's exactly-$75k golden file: $500/day, 3 days/week,
-    // 50 weeks/year -> crosses in week 50, around June 2026.
+    // 50 weeks/year -> crosses in week 50. Independently recomputed for FY2026-27 (1 July
+    // 2026 start, one year later than FY2025-26's 1 July 2025): week 50 is 49 full weeks after
+    // 1 July 2026 -> 9 June 2027 -> "June 2027", exactly one year after FY2025-26's "June 2026".
     const user = userEvent.setup();
     render(<GstThresholdCalculator />);
     await fillAndSubmit(user, { dayRate: "500", daysPerWeek: "3", weeksWorkedPerYear: "50" });
 
     expect(await screen.findByText(/projected to cross the threshold in week/i)).toBeInTheDocument();
-    expect(screen.getByText(/june 2026/i)).toBeInTheDocument();
+    expect(screen.getByText(/june 2027/i)).toBeInTheDocument();
     expect(screen.getByText(/obligation to register for gst within/i)).toBeInTheDocument();
     expect(screen.getByText(/21 days/i)).toBeInTheDocument();
     expect(screen.getByText(/turnover.*not how much of that money is still sitting in a bank account/i)).toBeInTheDocument();

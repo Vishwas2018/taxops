@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { calculateSetAside, type TaxSetAsideResult } from "@/lib/calculators/tax-set-aside";
-import { fy2025_26 } from "@/lib/tax-config/fy2025-26";
+import { fy2026_27 } from "@/lib/tax-config/fy2026-27";
 import {
   taxSetAsideFormSchema,
   type TaxSetAsideFormInput,
@@ -48,7 +48,7 @@ export function TaxSetAsideCalculator() {
           gstRegistered: values.gstRegistered,
           hasHelpDebt: values.hasHelpDebt,
         },
-        fy2025_26,
+        fy2026_27,
       ),
     );
   }

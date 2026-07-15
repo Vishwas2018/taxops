@@ -4,7 +4,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { projectGstThreshold, type GstThresholdProjectionResult } from "@/lib/calculators/gst-threshold";
-import { fy2025_26 } from "@/lib/tax-config/fy2025-26";
+import { fy2026_27 } from "@/lib/tax-config/fy2026-27";
 import {
   gstThresholdFormSchema,
   type GstThresholdFormInput,
@@ -44,7 +44,7 @@ export function GstThresholdCalculator() {
           weeksWorkedPerYear: values.weeksWorkedPerYear,
           weeksAlreadyWorkedThisFY: values.weeksAlreadyWorkedThisFY,
         },
-        fy2025_26,
+        fy2026_27,
       ),
     );
   }

@@ -145,6 +145,37 @@ from "announced" to "law" in the gap between a ticket being written and the work
   framing, a source's year in its title) is not verification on its own — click through to the
   authoritative source itself, at the moment of writing, every time.
 
+## 7. Which surface defaults to which financial year
+
+FY2026-27 (`fy2026_27` in `src/lib/tax-config/fy2026-27.ts`) exists alongside FY2025-26, not in
+place of it - see step 1. Day 15 classified every FY-aware surface into one of three groups
+rather than flipping a single global "current year" switch, and each surface's default is
+recorded here so a future day changing a default has one place to check what it's overriding:
+
+- **Forward-looking, FY2026-27 only, no selector**: `tax-set-aside` and `gst-threshold`. Both
+  calculators exist to help a contractor plan for money not yet earned (this year's or next
+  year's set-aside, when turnover will cross the GST threshold) - the year that matters is the
+  one the planning is for, which by Day 15 is FY2026-27. No FY2025-26 option is offered on
+  these two; there's no planning use case for projecting into a financial year that's already
+  closed or about to close.
+- **Retrospective, stays FY2025-26, no selector, not revisited by this change**: `/tax-dates`'s
+  FY2025-26 entries and the EOFY checklists. Checklists don't read a `TaxYearConfig` at all (they
+  aren't rate-dependent), and the tax-dates timeline's FY2025-26 rows describe obligations that
+  already fell (or are about to fall) due under the FY2025-26 calendar - switching their
+  underlying year would misdescribe a due date that already happened. FY2026-27 key dates were
+  added alongside, not instead of, FY2025-26's - see `key-dates-2026-27.ts` below.
+- **Both years relevant, FY2026-27 default, explicit selector**: `contractor-take-home`,
+  `property-cash-flow`, `division293`. All three are estimate tools someone might reasonably run
+  against either the year in progress or the year just closed (e.g. sanity-checking a FY2025-26
+  Division 293 bill after year-end, or planning FY2026-27 take-home ahead of a rate change) -
+  unlike the forward-looking pair, there's a real use case for either year, so these three get an
+  explicit FY selector (`FinancialYearSelect`, `src/components/calculators/`) defaulting to
+  FY2026-27 rather than silently picking one. Switching the selector swaps the `TaxYearConfig`
+  passed to the engine, the FY badge in the results header (`Estimated results — FY{...}`, driven
+  directly by `result.financialYear` - no separately-tracked display value that could drift from
+  what was actually calculated), and, for `property-cash-flow`, the marginal-rate dropdown's own
+  bracket-rate labels (16% under FY2025-26, 15% under FY2026-27 for the same bracket).
+
 ## Looking ahead: FY2026-27 will differ materially, not just by indexation
 
 Flagging now so it isn't missed later, not building it yet: **FY2026-27's `TaxYearConfig` will
@@ -156,3 +187,27 @@ surface than "the brackets moved a bit." When a future day picks up `fy2026-27.t
 these specifically against the Federal Register and ATO (per the rule above) rather than
 assuming they're routine indexation deltas from `fy2025-26.ts` - this is a new-mechanism change
 (a standard deduction didn't exist before), not a moved threshold.
+
+**Day 15 update: `fy2026-27.ts` now exists** (see above), built and golden-tested against the
+Day 13.5 reform package's 1 July 2026 provisions (the second-bracket 16%→15% cut and the $1,000
+standard work-related deduction). This section now flags the **next** boundary instead.
+
+## Looking ahead: FY2027-28 is already partly known, not built
+
+Flagging now, per the same discipline as the FY2026-27 note above - **do not build a
+`fy2027-28.ts` config yet**, but two FY2027-28 changes are already legislated and known ahead of
+time, surfaced here so a future day doesn't have to rediscover them from scratch:
+
+- **A further second-bracket cut, 15%→14%**, under the **Cost of Living Tax Cuts Act 2025** -
+  the next step down from the 16%→14% two the Day 13.5 reform package's 15% is a stop on the way
+  to.
+- **WATO commencement** - a further measure due to start in FY2027-28, named at Day 15's Gate 3
+  sign-off but not yet independently researched by this project (no Federal Register or ATO
+  citation collected for it here - that click-verification is FY2027-28 config work, not this
+  note).
+
+Both are recorded here as known-ahead-of-time facts to check first, not as verified figures to
+build from directly - when a future day actually builds `fy2027-28.ts`, click-verify both against
+the Federal Register/ATO at that time per rule 6 above (a fact that was true at Gate 3 sign-off
+can still be stale by the time the config work lands, same as every other legal-status claim this
+doc warns about).

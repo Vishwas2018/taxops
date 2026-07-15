@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fy2025_26 } from "@/lib/tax-config/fy2025-26";
+import { fy2026_27 } from "@/lib/tax-config/fy2026-27";
 import { projectGstThreshold } from "./gst-threshold";
 
 const config = fy2025_26;
@@ -122,5 +123,65 @@ describe("projectGstThreshold", () => {
       expect(result.crossesThreshold).toBe(true);
       expect(result.weekThresholdCrossed).toBe(1);
     });
+  });
+});
+
+describe("projectGstThreshold against fy2026-27", () => {
+  // gst-threshold is a forward-looking calculator defaulting to FY2026-27 (see
+  // docs/updating-tax-data.md). The $75,000 registration threshold itself is unchanged from
+  // FY2025-26, so the dollar figures below are identical to the FY2025-26 golden files above -
+  // what actually changes is the calendar month a crossing week maps to, since FY2026-27
+  // starts on 1 July 2026, a full year later than FY2025-26's 1 July 2025. Every date below
+  // was independently recomputed (not shifted by "add a year" reasoning) via the same
+  // date-arithmetic method Day 14 used, per docs/updating-tax-data.md's golden-file
+  // discipline: `node -e` verified 1 July 2026 + 49*7 days = 9 June 2027, and 1 July 2026 +
+  // 33*7 days = 17 February 2027.
+  it("golden file: exactly $75,000 boundary, crosses in the final worked week", () => {
+    const result = projectGstThreshold(
+      { dayRate: 500, daysPerWeek: 3, weeksWorkedPerYear: 50 },
+      fy2026_27,
+    );
+    expect(result.projectedAnnualTurnover).toBe(75_000);
+    expect(result.crossesThreshold).toBe(true);
+    expect(result.weekThresholdCrossed).toBe(50);
+    expect(result.monthThresholdCrossed).toBe("June 2027");
+    expect(result.marginBelowThreshold).toBeNull();
+    expect(result.financialYear).toBe("2026-27");
+    expect(result.isEstimate).toBe(true);
+  });
+
+  it("golden file: crossing mid-year, offset by weeks already worked this FY", () => {
+    const result = projectGstThreshold(
+      { dayRate: 800, daysPerWeek: 4, weeksWorkedPerYear: 46, weeksAlreadyWorkedThisFY: 10 },
+      fy2026_27,
+    );
+    expect(result.projectedAnnualTurnover).toBe(147_200);
+    expect(result.crossesThreshold).toBe(true);
+    expect(result.weekThresholdCrossed).toBe(34);
+    expect(result.monthThresholdCrossed).toBe("February 2027");
+    expect(result.marginBelowThreshold).toBeNull();
+  });
+
+  it("golden file: well below the threshold - never crosses", () => {
+    const result = projectGstThreshold(
+      { dayRate: 400, daysPerWeek: 3, weeksWorkedPerYear: 46 },
+      fy2026_27,
+    );
+    expect(result.projectedAnnualTurnover).toBe(55_200);
+    expect(result.crossesThreshold).toBe(false);
+    expect(result.weekThresholdCrossed).toBeNull();
+    expect(result.monthThresholdCrossed).toBeNull();
+    expect(result.marginBelowThreshold).toBe(19_800);
+  });
+
+  it("boundary: exactly at the threshold in the first worked week crosses immediately, in FY2026-27's own first month", () => {
+    const result = projectGstThreshold(
+      { dayRate: 75_000, daysPerWeek: 1, weeksWorkedPerYear: 1 },
+      fy2026_27,
+    );
+    expect(result.crossesThreshold).toBe(true);
+    expect(result.weekThresholdCrossed).toBe(1);
+    expect(result.monthThresholdCrossed).toBe("July 2026");
+    expect(result.marginBelowThreshold).toBeNull();
   });
 });

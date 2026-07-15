@@ -6,6 +6,7 @@ export const AUDIENCE_LABELS: Record<KeyDateAudience, string> = {
   everyone: "Everyone",
   contractor: "Contractor",
   "property-investor": "Property investor",
+  "everyone-with-employer": "Everyone with an employer",
 };
 
 function parseKeyDate(date: string): Date {

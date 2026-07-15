@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-export const keyDateAudienceSchema = z.enum(["everyone", "contractor", "property-investor"]);
+export const keyDateAudienceSchema = z.enum([
+  "everyone",
+  "contractor",
+  "property-investor",
+  "everyone-with-employer",
+]);
 
 export const keyDateSchema = z.object({
   id: z.string().regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, "id must be lowercase kebab-case"),
