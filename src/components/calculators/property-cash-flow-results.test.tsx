@@ -56,6 +56,33 @@ describe("PropertyCashFlowResults", () => {
     ).toBeInTheDocument();
   });
 
+  it("states the 2026 Budget reform status note: current law only, changes not yet in effect", () => {
+    // Day 13 Part A: the engine still models current law only (no logic change) - this is a
+    // copy-only addition alongside the existing exclusions list, flagging that announced
+    // negative gearing/CGT changes (Treasury Laws Amendment (Tax Reform No. 1) Act 2026) don't
+    // apply to this estimate yet.
+    const data = calculatePropertyCashFlow(
+      {
+        annualRentalIncome: 20_000,
+        annualExpenses: 5_000,
+        annualLoanInterest: 12_000,
+        annualDepreciation: 6_000,
+        marginalTaxRate: 0.37,
+      },
+      fy2025_26,
+    );
+    render(<PropertyCashFlowResults data={data} />);
+    // The lead-in ("2026 Budget reform:") is its own bolded <span> inside the paragraph, so a
+    // plain getByText would match both the span and its parent - query by the paragraph's
+    // data-state attribute instead and assert on its assembled textContent.
+    const note = screen.getByText((_, element) => element?.getAttribute("data-state") === "reform-status-note");
+    expect(note.textContent).toMatch(/2026 budget reform/i);
+    expect(note.textContent).toMatch(/models current law only/i);
+    expect(note.textContent).toMatch(/12 may 2026/i);
+    expect(note.textContent).toMatch(/1 july 2027/i);
+    expect(note.textContent).toMatch(/grandfathered/i);
+  });
+
   it("renders a negatively-geared loss clearly and correctly, not as a misleading positive", () => {
     // Loss of $3,000 (rent $20k - expenses $5k - interest $12k - depreciation $6k = -$3k).
     // Pre-tax cash flow (excludes depreciation) is +$3,000, so this also proves the panel

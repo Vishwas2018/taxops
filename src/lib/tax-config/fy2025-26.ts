@@ -98,6 +98,22 @@ export const fy2025_26: TaxYearConfig = {
     },
   },
 
+  // GST rate and registration threshold - unchanged since GST's introduction, not FY-specific
+  // or indexed, so not expected to need per-year revisiting like the brackets/thresholds above.
+  gst: {
+    rate: {
+      value: 0.1,
+      source: "https://www.ato.gov.au/businesses-and-organisations/international-tax-for-business/gst-for-non-resident-businesses/how-australian-gst-works",
+      verified: true,
+    },
+    registrationThreshold: {
+      value: 75_000,
+      source: "https://www.ato.gov.au/businesses-and-organisations/gst-excise-and-indirect-taxes/gst/registering-for-gst",
+      verified: true,
+      note: "Mandatory registration turnover threshold ($150,000 for non-profits, not modeled here - this app's persona is a sole-trader/company contractor, not a non-profit).",
+    },
+  },
+
   // FY2025-26 introduced a new marginal repayment system (previously a single flat
   // percentage of total repayment income applied once you crossed the minimum threshold).
   // Direct ato.gov.au fetches returned HTTP 403 (bot-blocked); verified via two independent

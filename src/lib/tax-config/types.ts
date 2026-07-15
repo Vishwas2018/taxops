@@ -52,6 +52,11 @@ export interface TaxYearConfig {
     incomeThreshold: SourcedValue<number>;
     rate: SourcedValue<number>;
   };
+  gst: {
+    rate: SourcedValue<number>;
+    /** Mandatory GST registration turnover threshold - not FY-specific or indexed. */
+    registrationThreshold: SourcedValue<number>;
+  };
   helpRepayment: {
     /** Equal to `bands[0].min` - kept as its own named value since it's the figure most
      * worth surfacing directly in the UI ("you're below the repayment threshold"). */

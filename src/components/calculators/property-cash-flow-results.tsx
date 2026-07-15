@@ -78,6 +78,14 @@ export function PropertyCashFlowResults({ data }: { data: PropertyCashFlowResult
             <li>Loan principal repayments or depreciation recapture on sale</li>
             <li>Assumes your marginal tax rate stays unchanged by this property&apos;s income or loss</li>
           </ul>
+          <p className="mt-3 rounded-md bg-neutralSubtle px-3 py-2" data-state="reform-status-note">
+            <span className="font-medium text-foreground">2026 Budget reform: </span>
+            this calculator models current law only. Announced changes (not yet in effect) would
+            limit negative gearing on established residential properties purchased after 7:30pm
+            AEST 12 May 2026 to residential rental income only, starting 1 July 2027 - properties
+            held (or already under contract) before that time are grandfathered under current
+            rules. See the Tips articles on the 2026 Budget reform for detail.
+          </p>
         </div>
 
         <details className="text-sm text-muted-foreground">

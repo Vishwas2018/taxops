@@ -2010,6 +2010,134 @@ entirely, not this task's to clean up.
   three calculator and wizard captures show non-pill inputs and card-wrapped forms, and
   `tips-article.png` now shows exactly one disclaimer.
 
+## Day 13 — Budget 2026 reform response + Tax Set-Aside Estimator (2026-07-15)
+
+### Part A: reform integrity pass
+
+**Research, click-verified against primary sources, not assumed.** Pulled the actual Budget
+factsheet PDF (`budget.gov.au`) and read it directly (not just a search snippet) for the
+negative gearing and CGT reform's mechanics, effective dates, and grandfathering. A separate,
+important finding from checking legislative status specifically: this is **not** merely
+"announced" as of today - the Federal Register of Legislation
+(`legislation.gov.au/C2026A00049/asmade`) confirms the Treasury Laws Amendment (Tax Reform No.
+1) Act 2026 (Act No. 49 of 2026) received **Royal Assent on 26 June 2026**, three weeks before
+today. Its substantive provisions (limiting negative gearing to new builds, replacing the 50%
+CGT discount with cost base indexation + a 30% minimum tax) don't commence until **1 July
+2027**, so nothing changes for any return before then - but the Act itself has passed, not just
+been proposed.
+
+**A deliberate framing decision, made with the human's sign-off, not silently**: this task's own
+brief was written assuming "announced changes, not yet law." Surfaced the discrepancy directly
+rather than either blindly following the stale assumption or silently overriding it - offered
+"legislated, not yet in effect" (accurate) against "follow the brief literally" (risks a claim
+contradicted by a primary source the app itself cites). The human chose to follow the brief
+literally. Compromise: content and the calculator note use "announced... not yet in effect"
+language throughout (matches the brief's intent - nothing applies to your return yet) but
+nowhere claims the Bill hasn't passed Parliament, since that specific claim is now false and
+directly contradicted by the Federal Register of Legislation source this content itself cites.
+`legislation.gov.au` access sometimes required going through `ato.gov.au` fetches that
+returned HTTP 403 (bot-blocked, same pattern as prior days) - cross-verified via the Budget PDF,
+the Federal Register entry, and independent trade press (The Adviser, PwC, Corrs) instead.
+
+**Property cash flow calculator**: added a status note to the existing "This estimate does not
+include" exclusions block (`property-cash-flow-results.tsx`) - no calculator logic changed, the
+engine still models current law only. New regression test
+(`property-cash-flow-results.test.tsx`) asserts the note's key facts render (2026 Budget reform,
+12 May 2026, 1 July 2027, grandfathered) via a `data-state` attribute query rather than
+`getByText`, since the note's bolded lead-in is its own nested `<span>` and a plain text query
+matches both it and its parent.
+
+**Two new `draft: true` articles**, both with primary sources, explicit not-yet-in-effect
+framing, and a "Questions for your registered tax agent" section (task-specified, matching the
+existing checklist section's exact wording):
+
+- `content/property-deductions/negative-gearing-changes-2026-budget-explained.mdx` - what
+  changes from 1 July 2027, who's grandfathered (everything held before 7:30pm AEST 12 May
+  2026), the transitional window, and the new-build exemption test.
+- `content/wealth-preservation/cgt-discount-changes-split-calculation-explained.mdx` - why a
+  gain spanning 1 July 2027 is split into a pre-2027 (current 50% discount) and post-2027 (cost
+  base indexation + 30% minimum tax) portion, not recalculated wholesale.
+
+Both pass `validate:content` (11/11 articles) and the existing `copy-audit.test.ts` sweep
+unmodified - no new banned-phrase infrastructure needed.
+
+**Staleness audit of existing articles - a verified null result, not skipped**: grepped every
+article in `content/` for "gearing" and "capital gain" (case-insensitive). Only
+`wealth-preservation/record-keeping-and-cgt-evidence.mdx` matches, and only in its "What this
+doesn't cover" section, which explicitly defers the CGT discount topic rather than describing
+its mechanics - nothing in it is rendered stale by the reform. No other article makes any
+operative claim about negative gearing rules or the 50% CGT discount. Confirmed via grep, not
+just recalled from memory; no changes needed to existing content.
+
+### Part B: Tax Set-Aside Estimator (`/calculators/tax-set-aside`)
+
+`calculateSetAside` (`src/lib/calculators/tax-set-aside.ts`) reuses `calculateIncomeTax` and
+`calculateHelpRepayment` rather than reimplementing either - gross income (day rate × days/week
+× weeks) is taxed as ordinary sole-trader/individual income, HELP is estimated the same "gross
+income as a stand-in for repayment income" way `contractor-take-home.ts` already does. New
+config addition: `TaxYearConfig.gst` (rate 10%, $75,000 registration threshold), both real,
+click-verified ATO figures, unchanged since GST's introduction so not FY-specific like the rest
+of `fy2025-26.ts`.
+
+**GST is deliberately excluded from the set-aside total**, not folded in - `totalSetAside` is
+income tax + HELP only. GST collected (when `gstRegistered`) is a separate, itemized field with
+explicit "collected on behalf of the ATO, not your income" framing in both the JSDoc assumptions
+and the results panel, so the suggested set-aside figure never implies GST is spendable income.
+`aboveRegistrationThreshold` is independent of the `gstRegistered` toggle, so the UI can note
+"this income is at/above the mandatory threshold" even when a user hasn't registered - stated as
+a fact about the ATO's rule, not advice to register (CLAUDE.md's no-advisory-language rule).
+
+UI follows the Day 4/5 calculator pattern exactly (RHF + Zod, same field/error/description
+conventions as `contractor-take-home-calculator.tsx`) with Day 12's elevation rules applied from
+the start (form in a base `Card`, results in `variant="elevated"`) rather than retrofitted.
+Added to `CALCULATORS` in `calculators/page.tsx`, which the dashboard's calculator-card grid and
+`copy-audit.test.ts`'s UI sweep both already iterate dynamically - no separate wiring needed for
+either.
+
+**Tests**:
+- Golden files: $100,000 gross (cross-checks `income-tax.test.ts`'s existing $100k golden net
+  tax exactly), and a $200,000 high-income case with HELP debt and GST registration (hand-computed
+  against the bracket table, cross-checks `help-repayment.test.ts`'s existing $200k golden
+  repayment).
+- $75,000 GST registration threshold boundary: one cent below / exactly at / one cent above,
+  plus a case proving `aboveRegistrationThreshold` is independent of the `gstRegistered` toggle
+  (voluntary registration below the mandatory threshold).
+- UI integration test (`tax-set-aside-calculator.test.tsx`): wires the form through the real
+  engine, HELP toggle, and GST toggle to the rendered breakdown - not mocked.
+- Copy-audit coverage: the new calculator's card title/description are automatically swept by
+  the existing `copy-audit.test.ts` (it iterates `CALCULATORS`), and the two new articles by the
+  same file's article-body sweep - both already verified green above, no new test
+  infrastructure needed.
+- Coverage regression caught by CI's own gate, not eyeballed: the first `test:coverage` run
+  failed at 98.52% branches (the `weeksPerYear === 0` guard's zero-branch was never exercised).
+  Added the missing test; back to 100%.
+
+### Deviations
+
+- Followed the human's explicit "follow the brief literally" choice on legislative-status
+  wording (see Part A above) rather than the researched-and-more-precise "legislated, not yet in
+  effect" framing - narrowed to avoid the one specific claim (Bill still before Parliament) that
+  a primary source this content cites now contradicts.
+- No e2e journey spec added for the new calculator - unit + UI integration tests exercise the
+  full engine-to-render path already; the existing e2e suite's calculator coverage
+  (`journeys/calculators.spec.ts`) wasn't extended to a fourth calculator, consistent with that
+  file not having been extended for div-293 either when it shipped.
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content &&
+  npm run test:coverage && npm run build`. 289 unit tests, 100% coverage. One transient
+  `checklists/page.test.tsx` timeout during two earlier full-suite coverage runs (passed reliably
+  in isolation both times) - pre-existing test, untouched by this day's diff, not a regression;
+  a third full run passed clean.
+- `npm run test:e2e`: full suite green, 41/41. One earlier run's auth setup timed out after
+  several Supabase Docker containers (storage, edge_runtime, pooler, and others - not the
+  core db/auth/rest/kong services) had stopped under this session's accumulated resource
+  load; confirmed the app itself was unaffected (manual `curl` to `/sign-in` returned 200 with
+  the form present) before retrying clean.
+- Article/calculator-card copy-audit sweep (`copy-audit.test.ts`) passes unmodified against both
+  new articles and the new calculator card.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

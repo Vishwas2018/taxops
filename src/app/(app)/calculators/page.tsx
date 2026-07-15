@@ -20,6 +20,11 @@ export const CALCULATORS = [
     title: "Division 293",
     description: "Check whether the extra 15% tax applies to your super contributions.",
   },
+  {
+    href: "/calculators/tax-set-aside",
+    title: "Tax set-aside estimator",
+    description: "Work out how much to set aside from a day rate for tax, HELP, and GST.",
+  },
 ];
 
 export default function CalculatorsPage() {

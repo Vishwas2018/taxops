@@ -73,3 +73,23 @@ export const div293FormSchema = z.object({
 
 export type Div293FormInput = z.output<typeof div293FormSchema>;
 export type Div293FormRawInput = z.input<typeof div293FormSchema>;
+
+export const taxSetAsideFormSchema = z.object({
+  dayRate: z.coerce
+    .number({ error: "Enter a day rate" })
+    .positive("Day rate must be greater than zero")
+    .max(50_000, "Enter a realistic day rate"),
+  daysPerWeek: z.coerce
+    .number({ error: "Enter billable days per week" })
+    .positive("Must be greater than zero")
+    .max(7, "Cannot exceed 7 days per week"),
+  weeksPerYear: z.coerce
+    .number({ error: "Enter weeks worked per year" })
+    .positive("Must be greater than zero")
+    .max(52, "Cannot exceed 52 weeks per year"),
+  gstRegistered: z.boolean(),
+  hasHelpDebt: z.boolean(),
+});
+
+export type TaxSetAsideFormInput = z.output<typeof taxSetAsideFormSchema>;
+export type TaxSetAsideFormRawInput = z.input<typeof taxSetAsideFormSchema>;
