@@ -2253,6 +2253,114 @@ actually say - the reform is law, not pending.
 - `npm run test:e2e`: full suite green, 41/41, run serially (`--workers=1`) for the same
   resource-contention reason above.
 
+## Day 14 — GST Threshold Projector + Tax Dates Timeline (2026-07-15)
+
+### Part A: GST Threshold Projector (`/calculators/gst-threshold`)
+
+`projectGstThreshold` (`src/lib/calculators/gst-threshold.ts`) projects, from a level day rate
+and work pattern, whether and when cumulative turnover reaches the `TaxYearConfig.gst`
+registration threshold added on Day 13. Reuses that config directly rather than re-deriving the
+$75,000 figure. The `weeksAlreadyWorkedThisFY` offset lets a mid-year projection report an
+accurate crossing month - week 1 of the projection maps to financial-year week `1 + offset`,
+and a `financialYearStart("2025-26") -> 1 July 2025` helper converts that week number to a
+calendar month via `Date` arithmetic.
+
+**Every calendar-date assertion in the golden tests was independently computed before the
+engine was written**, not read back from the code under test: e.g. the crossing-mid-year case
+(dayRate $800, 4 days/week, 46 weeks, 10-week offset) crosses at FY week 34, and "week 34 of
+FY2025-26 -> 17 February 2026" was computed with a standalone `node -e` date-arithmetic
+one-liner first, then used as the test's expected value. Same for the exactly-$75k boundary
+case (week 50 -> June 2026). This is the same discipline `docs/updating-tax-data.md` asks for
+with tax-config golden files, applied here to date arithmetic instead of dollar arithmetic -
+a test that only checks the code against its own output can't catch a wrong formula.
+
+Results panel carries the two-sided education the task asked for directly, not just numbers:
+crossing the threshold surfaces the 21-day registration obligation and the turnover-not-balance
+distinction, with an ATO source link; staying below it notes registration is optional with
+real trade-offs (GST credits vs. charging GST and lodging BAS), also linked to the same ATO
+page. No tips-article link added on either branch - grepped `content/` for any existing GST
+registration article first and found none, so per the task's own instruction ("a tips-article
+link if one exists; don't write a new article this day") the link is correctly absent, not
+missing.
+
+UI follows the same RHF+Zod, Day 12 elevation, `aria-live` results-region pattern as every
+other calculator, added to `CALCULATORS` (automatically covered by the existing copy-audit
+sweep and the dashboard's calculator-card grid, same as Day 13's addition).
+
+### Part B: Tax Dates Timeline (`/tax-dates`)
+
+**Data**: `KeyDate` type added to `lib/tax-config/types.ts` (id, date, title, description,
+audience chips, source, verified) - deliberately *not* folded into `TaxYearConfig` itself, since
+nothing in `lib/calculators/` consumes it, but versioned per-financial-year the same way
+(`key-dates.ts` sits alongside `fy2025-26.ts`; a future `key-dates-2026-27.ts` would sit
+alongside it too, not replace it). 16 entries for FY2025-26: FY start/end, the individual
+self-lodge deadline (31 October 2025) and the tax-agent-extension deadline (15 May 2026) as two
+separate dated entries rather than one ambiguous line, and four quarters each of BAS, super
+guarantee, and PAYG instalment due dates. Every date click-verified against a live ATO search
+before being encoded, not carried over from prior knowledge - and one genuinely useful catch
+along the way: the Q4 super guarantee due date (28 July 2026) is the **last** payment under the
+quarterly system before Payday Super replaces it from 1 July 2026, worth a note on that entry
+specifically since it's not just "another quarter."
+
+**Audience chips reuse existing vocabulary**, not new terms: `AUDIENCE_LABELS` maps
+`"contractor" | "property-investor" | "everyone"` to the same "contractor"/"property investor"
+language already used in `isContractorLikeArrangement` and the marketing copy, rather than
+inventing a fresh taxonomy for this one feature.
+
+**`findNextUpcomingKeyDate` and `groupKeyDatesByQuarter`** (`lib/tax-dates/derived.ts`) are pure
+and independently tested with an injectable `now`, including the FY-rollover edge case the task
+called out specifically: once `now` passes the last known entry (28 July 2026, since no
+`key-dates-2026-27` file exists yet), the function returns `null` rather than throwing or
+silently returning a stale/wrong date - and the dashboard's "next key date" line and the
+`/tax-dates` page's "next upcoming" highlight both handle that `null` gracefully (no line
+renders; no card gets flagged) rather than assuming a next date always exists. Quarter grouping
+buckets by the *date's own* calendar quarter, not the reporting period a due date trails by
+about a month - deliberately, so a reader scanning chronologically finds each entry under the
+quarter they'd expect, without first having to know which reporting period a "28 October" due
+date is actually for.
+
+**Temptation resisted, logged as asked**: no reminders, no notifications, no calendar/ICS
+export were added, even though "next upcoming" highlighting and a dashboard line are adjacent
+enough to a reminders feature that it was worth naming explicitly - this is a static reference
+page and dashboard line only, nothing schedules or pushes anything. Flagging this here rather
+than silently not doing it, per the task's own ask.
+
+**Nav wiring**: `/tax-dates` added to `proxy.ts`'s `PUBLIC_PATHS` (same reasoning as `/tips` -
+useful without an account, and the app's proxy fails closed by default) and placed under
+`(marketing)/tax-dates/`, so it's reachable from both the public marketing footer and the
+authenticated app-shell nav (`NAV_ITEMS`, shared by the desktop sidebar and the mobile nav
+sheet - one array, both surfaces update together, same as every other entry). Added a footer
+nav link (task specified footer, not header - the marketing header's existing `/tips` link was
+left as the only header nav item, not extended to match, since the task didn't ask for that).
+Dashboard gains a one-line "Next key date" pointer to `/tax-dates`, using the exact same
+`findNextUpcomingKeyDate(KEY_DATES_2025_26)` call the page itself uses - one source of truth,
+not two independent implementations that could drift.
+
+**Copy-audit coverage extended, not a new framework**: `copy-audit.test.ts`'s existing
+structured-UI-copy sweep (which already iterates `CALCULATORS`, `CHECKLIST_GROUPS`, etc.) now
+also iterates `KEY_DATES_2025_26` titles/descriptions - three lines added to an existing test,
+not a new compliance-checking system.
+
+### Deviations
+
+- Updated `e2e/journeys/mobile-nav.spec.ts`'s stale "same five destinations" language (now six)
+  and added "Tax Dates" to its destination-presence loop - the test itself didn't assert an
+  exact count so it wasn't failing, but its name and comment were describing a nav that no
+  longer existed.
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content &&
+  npm run test:coverage && npm run build`. 321 tests, 100% coverage. Ran
+  `vitest run --coverage --no-file-parallelism` directly this time (serial workers) rather than
+  hitting the same resource-contention flakes as the last two days and re-diagnosing them again
+  - clean on the first attempt.
+- `npm run test:e2e`: full suite green, 41/41, run serially for the same reason. Confirmed
+  `/calculators/gst-threshold` and `/tax-dates` both render correctly in the production build
+  (`/tax-dates` prerenders as static content - no per-user data, unlike every `(app)` route).
+- Regenerated `e2e/screenshots/audit/*.png` (nav changed) - mobile captures now show "Tax
+  Dates" in the sheet; desktop dashboard shows the new "Next key date" line.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

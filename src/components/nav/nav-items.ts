@@ -4,4 +4,5 @@ export const NAV_ITEMS = [
   { href: "/calculators", label: "Calculators" },
   { href: "/checklists", label: "Checklists" },
   { href: "/tips", label: "Tips" },
+  { href: "/tax-dates", label: "Tax Dates" },
 ];

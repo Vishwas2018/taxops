@@ -93,3 +93,25 @@ export const taxSetAsideFormSchema = z.object({
 
 export type TaxSetAsideFormInput = z.output<typeof taxSetAsideFormSchema>;
 export type TaxSetAsideFormRawInput = z.input<typeof taxSetAsideFormSchema>;
+
+export const gstThresholdFormSchema = z.object({
+  dayRate: z.coerce
+    .number({ error: "Enter a day rate" })
+    .positive("Day rate must be greater than zero")
+    .max(50_000, "Enter a realistic day rate"),
+  daysPerWeek: z.coerce
+    .number({ error: "Enter billable days per week" })
+    .positive("Must be greater than zero")
+    .max(7, "Cannot exceed 7 days per week"),
+  weeksWorkedPerYear: z.coerce
+    .number({ error: "Enter weeks worked per year" })
+    .positive("Must be greater than zero")
+    .max(52, "Cannot exceed 52 weeks per year"),
+  weeksAlreadyWorkedThisFY: z.coerce
+    .number({ error: "Enter weeks already worked this financial year" })
+    .min(0, "Cannot be negative")
+    .max(52, "Cannot exceed 52 weeks"),
+});
+
+export type GstThresholdFormInput = z.output<typeof gstThresholdFormSchema>;
+export type GstThresholdFormRawInput = z.input<typeof gstThresholdFormSchema>;

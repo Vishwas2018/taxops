@@ -25,6 +25,11 @@ export const CALCULATORS = [
     title: "Tax set-aside estimator",
     description: "Work out how much to set aside from a day rate for tax, HELP, and GST.",
   },
+  {
+    href: "/calculators/gst-threshold",
+    title: "GST threshold projector",
+    description: "Project when your contracting turnover would reach the GST registration threshold.",
+  },
 ];
 
 export default function CalculatorsPage() {

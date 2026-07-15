@@ -6,6 +6,7 @@ import { CALCULATORS } from "@/app/(app)/calculators/page";
 import { FEATURES } from "@/app/(marketing)/page";
 import { CHECKLIST_GROUPS } from "@/lib/checklists/templates";
 import { ARTICLE_CATEGORIES } from "@/lib/content/schema";
+import { KEY_DATES_2025_26 } from "@/lib/tax-config/key-dates";
 import { TAX_PROFILE_QUESTION_GROUPS } from "@/lib/validation/tax-profile";
 
 /**
@@ -57,7 +58,7 @@ function findOffenders(
   return offenders;
 }
 
-describe("UI copy audit: calculator cards, tax-profile questions, checklist templates", () => {
+describe("UI copy audit: calculator cards, tax-profile questions, checklist templates, key dates", () => {
   function collectUiCopy(): { where: string; text: string }[] {
     const copy: { where: string; text: string }[] = [];
 
@@ -102,6 +103,11 @@ describe("UI copy audit: calculator cards, tax-profile questions, checklist temp
           copy.push({ where: `checklist "${group.id}.${item.id}" helpText`, text: item.helpText });
         }
       }
+    }
+
+    for (const entry of KEY_DATES_2025_26) {
+      copy.push({ where: `key date "${entry.id}" title`, text: entry.title });
+      copy.push({ where: `key date "${entry.id}" description`, text: entry.description });
     }
 
     return copy;

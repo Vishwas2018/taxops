@@ -22,7 +22,15 @@ export default function MarketingLayout({ children }: { children: React.ReactNod
         </nav>
       </header>
       <main className="flex-1">{children}</main>
-      <footer className="border-t px-6 py-6">
+      <footer className="space-y-4 border-t px-6 py-6">
+        <nav aria-label="Footer" className="flex justify-center">
+          <Link
+            href="/tax-dates"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            Tax Dates
+          </Link>
+        </nav>
         <Disclaimer variant="footer" />
       </footer>
     </div>

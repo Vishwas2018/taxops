@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
  * no replacement, leaving a signed-in mobile user with no way to move between app sections. This
  * covers the fix: a top-bar hamburger button opening a slide-over sheet (reusing the same
  * `@base-ui/react` Dialog primitive as `ui/dialog.tsx` - modal by default, so focus trap and
- * body scroll lock are the primitive's job, not hand-rolled here) listing the same five
+ * body scroll lock are the primitive's job, not hand-rolled here) listing the same
  * destinations as the desktop sidebar.
  */
 test.use({ viewport: { width: 390, height: 844 } });
@@ -34,12 +34,12 @@ test("open the mobile nav, navigate to checklists, and arrive there", async ({ p
   await expect(page.getByRole("heading", { name: "EOFY Checklists" })).toBeVisible();
 });
 
-test("the sheet lists the same five destinations as the desktop sidebar", async ({ page }) => {
+test("the sheet lists the same destinations as the desktop sidebar", async ({ page }) => {
   await page.goto("/dashboard");
   await page.getByRole("button", { name: "Open navigation menu" }).click();
 
   const nav = page.getByRole("dialog", { name: "Menu" });
-  for (const label of ["Dashboard", "Tax Profile", "Calculators", "Checklists", "Tips"]) {
+  for (const label of ["Dashboard", "Tax Profile", "Calculators", "Checklists", "Tips", "Tax Dates"]) {
     await expect(nav.getByRole("link", { name: label, exact: true })).toBeVisible();
   }
 });

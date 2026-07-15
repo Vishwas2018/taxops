@@ -5,7 +5,7 @@ import { updateSession } from "@/lib/supabase/middleware";
 // else is protected by default (fail closed) rather than allowlisting protected routes,
 // so a newly added authenticated route doesn't need a matching proxy.ts update to stay
 // protected.
-const PUBLIC_PATHS = ["/", "/sign-up", "/sign-in", "/reset-password", "/update-password"];
+const PUBLIC_PATHS = ["/", "/sign-up", "/sign-in", "/reset-password", "/update-password", "/tax-dates"];
 
 function isPublicPath(pathname: string): boolean {
   if (PUBLIC_PATHS.includes(pathname)) return true;

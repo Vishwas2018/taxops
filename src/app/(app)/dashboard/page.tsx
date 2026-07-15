@@ -9,12 +9,23 @@ import { getDefaultChecklistGroupIds } from "@/lib/checklists/select";
 import { CHECKLIST_GROUPS } from "@/lib/checklists/templates";
 import { CATEGORY_LABELS } from "@/lib/content/schema";
 import { createClient } from "@/lib/supabase/server";
+import { KEY_DATES_2025_26 } from "@/lib/tax-config/key-dates";
+import { findNextUpcomingKeyDate } from "@/lib/tax-dates/derived";
 import { getTaxProfile } from "@/lib/tax-profile/data";
 import {
   computeProfileCompleteness,
   getRelevantTipCategories,
   isContractorLikeArrangement,
 } from "@/lib/tax-profile/derived";
+
+function formatKeyDate(date: string): string {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-AU", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
 
 export const metadata: Metadata = { title: "Dashboard — TaxOps" };
 
@@ -36,6 +47,7 @@ export default async function DashboardPage() {
   const completeness = computeProfileCompleteness(profile);
   const relevantCategories = getRelevantTipCategories(profile);
   const highlightContractorTakeHome = isContractorLikeArrangement(profile.workArrangement);
+  const nextKeyDate = findNextUpcomingKeyDate(KEY_DATES_2025_26);
 
   const [checklistItemStates, checklistCustomItems] = await Promise.all([
     getChecklistItemStates(supabase, user.id),
@@ -54,6 +66,18 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-semibold">Dashboard</h1>
+
+      {nextKeyDate && (
+        <p className="text-sm text-textSecondary">
+          Next key date:{" "}
+          <Link
+            href="/tax-dates"
+            className="font-medium text-accent underline-offset-4 hover:underline"
+          >
+            {nextKeyDate.title} — {formatKeyDate(nextKeyDate.date)}
+          </Link>
+        </p>
+      )}
 
       <Card variant="elevated">
         <CardHeader>

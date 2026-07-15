@@ -67,3 +67,30 @@ export interface TaxYearConfig {
     cap: SourcedValue<{ threshold: number; rate: number }>;
   };
 }
+
+/** Who a `KeyDate` entry is typically relevant to - reuses the same "contractor / property
+ * investor" vocabulary as the rest of the app (see `isContractorLikeArrangement` and
+ * `getRelevantTipCategories` in `lib/tax-profile/derived.ts`) rather than inventing new terms,
+ * displayed as chips rather than used to filter the timeline in v1. */
+export type KeyDateAudience = "everyone" | "contractor" | "property-investor";
+
+/**
+ * One entry in the static tax-dates timeline (`lib/tax-config/key-dates.ts`). Not part of
+ * `TaxYearConfig` itself - unlike a rate or threshold, nothing in `lib/calculators/` consumes
+ * these; they exist purely for the `/tax-dates` reference page and the dashboard's "next key
+ * date" line, per CLAUDE.md's `no advisory language` rule the `description` is a plain
+ * statement of what the date is, never advice about what to do about it.
+ */
+export interface KeyDate {
+  /** Stable, unique, kebab-case identifier - not shown in the UI, used for React keys and to
+   * make individual entries addressable in tests. */
+  id: string;
+  /** ISO date (YYYY-MM-DD). */
+  date: string;
+  title: string;
+  description: string;
+  /** At least one entry - most dates apply to more than one audience. */
+  audience: KeyDateAudience[];
+  source: string;
+  verified: boolean;
+}
