@@ -56,11 +56,11 @@ describe("PropertyCashFlowResults", () => {
     ).toBeInTheDocument();
   });
 
-  it("states the 2026 Budget reform status note: current law only, changes not yet in effect", () => {
-    // Day 13 Part A: the engine still models current law only (no logic change) - this is a
-    // copy-only addition alongside the existing exclusions list, flagging that announced
-    // negative gearing/CGT changes (Treasury Laws Amendment (Tax Reform No. 1) Act 2026) don't
-    // apply to this estimate yet.
+  it("states the 2026 Budget reform status note: now law, commences 1 July 2027, grandfathered", () => {
+    // Day 13.5 correction: the Treasury Laws Amendment (Tax Reform No. 1) Act 2026 received
+    // Royal Assent on 26 June 2026 - it's now law, not merely announced. The engine still
+    // models current-law treatment (no logic change); this is a copy-only note flagging that
+    // the legislated changes don't commence until 1 July 2027.
     const data = calculatePropertyCashFlow(
       {
         annualRentalIncome: 20_000,
@@ -77,10 +77,12 @@ describe("PropertyCashFlowResults", () => {
     // data-state attribute instead and assert on its assembled textContent.
     const note = screen.getByText((_, element) => element?.getAttribute("data-state") === "reform-status-note");
     expect(note.textContent).toMatch(/2026 budget reform/i);
-    expect(note.textContent).toMatch(/models current law only/i);
+    expect(note.textContent).toMatch(/models current-law treatment/i);
+    expect(note.textContent).toMatch(/now law/i);
     expect(note.textContent).toMatch(/12 may 2026/i);
     expect(note.textContent).toMatch(/1 july 2027/i);
     expect(note.textContent).toMatch(/grandfathered/i);
+    expect(note.textContent).not.toMatch(/not yet in effect|announced changes|would limit/i);
   });
 
   it("renders a negatively-geared loss clearly and correctly, not as a misleading positive", () => {

@@ -80,11 +80,12 @@ export function PropertyCashFlowResults({ data }: { data: PropertyCashFlowResult
           </ul>
           <p className="mt-3 rounded-md bg-neutralSubtle px-3 py-2" data-state="reform-status-note">
             <span className="font-medium text-foreground">2026 Budget reform: </span>
-            this calculator models current law only. Announced changes (not yet in effect) would
-            limit negative gearing on established residential properties purchased after 7:30pm
-            AEST 12 May 2026 to residential rental income only, starting 1 July 2027 - properties
-            held (or already under contract) before that time are grandfathered under current
-            rules. See the Tips articles on the 2026 Budget reform for detail.
+            this calculator models current-law treatment. The legislated negative gearing and
+            CGT changes (Treasury Laws Amendment (Tax Reform No. 1) Act 2026, now law) commence
+            1 July 2027 - which regime applies then depends on your purchase date and property
+            type. In one sentence: everything held before 7:30pm AEST 12 May 2026 is grandfathered
+            under current treatment until sold. See the Tips articles on the 2026 tax reform for
+            detail.
           </p>
         </div>
 

@@ -114,3 +114,45 @@ Both triggers apply to the current file in place (step 1's "new file" procedure 
 only) - a Budget-night correction to the current year edits the existing year's file directly,
 the same way Day 3.5 corrected `fy2025-26.ts` itself rather than creating a new file for a
 mid-year change.
+
+## 6. Legal status verification — never inherited from a ticket or prior content
+
+This applies beyond `tax-config` figures: **any claim about a piece of legislation's status**
+(announced, introduced, passed the House, passed the Senate, awaiting Royal Assent, in force) —
+in an article, a calculator's copy, or a task's own brief — must be independently re-verified
+against the Federal Register of Legislation (`legislation.gov.au`) and/or the relevant ATO
+measure page **at the time of writing**, never carried forward from what a ticket says, from
+what an earlier article already claims, or from a status that was true when a prior day's work
+was done. Legislative status is a moving target in a way most tax figures aren't — a Bill can go
+from "announced" to "law" in the gap between a ticket being written and the work landing.
+
+**Two precedents, not a hypothetical concern**:
+
+- **Day 13.5**: a task's own brief described the 2026 Budget's negative gearing/CGT reform as
+  "announced... not yet law." By the time the correcting work happened, the Treasury Laws
+  Amendment (Tax Reform No. 1) Act 2026 (No. 49/2026) and its companion Income Tax Rates
+  Amendment (Tax Reform No. 1) Act 2026 (No. 50/2026) had already passed both houses (25 June
+  2026) and received Royal Assent (26 June 2026) — confirmed directly against both Acts'
+  Federal Register entries, not assumed from the ticket's own wording. Two articles and a
+  calculator's status note had to be rewritten from "not yet law" to "now law, commencing 1
+  July 2027" as a result. The ticket's framing wasn't malicious or careless when written — it
+  was simply stale by the time it was acted on, exactly the failure mode this rule exists to
+  catch.
+- **Day 3.5**: a different flavour of the same root problem — a secondary source titled
+  "...for 2026" was read at a glance as describing FY2025-26's HELP/STSL thresholds, when a
+  more targeted second search revealed it was actually the indexed **FY2026-27** figures. See
+  the near-miss writeup in step 2 above. Same lesson in both cases: a label (a ticket's
+  framing, a source's year in its title) is not verification on its own — click through to the
+  authoritative source itself, at the moment of writing, every time.
+
+## Looking ahead: FY2026-27 will differ materially, not just by indexation
+
+Flagging now so it isn't missed later, not building it yet: **FY2026-27's `TaxYearConfig` will
+need more than the routine 1 July indexation refresh** described in step 1. The same reform
+package that Day 13.5 corrected also legislated income tax rate cuts and a new standard
+work-related deduction, both commencing **1 July 2026** — a full financial year earlier than the
+negative gearing/CGT changes' 1 July 2027 commencement, and a materially different config
+surface than "the brackets moved a bit." When a future day picks up `fy2026-27.ts`, click-verify
+these specifically against the Federal Register and ATO (per the rule above) rather than
+assuming they're routine indexation deltas from `fy2025-26.ts` - this is a new-mechanism change
+(a standard deduction didn't exist before), not a moved threshold.

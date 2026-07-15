@@ -2138,6 +2138,121 @@ either.
 - Article/calculator-card copy-audit sweep (`copy-audit.test.ts`) passes unmodified against both
   new articles and the new calculator card.
 
+## Day 13.5 — Reform content correction: now law, not "not yet law" (2026-07-15)
+
+### Why this correction happened
+
+Day 13's own research found the reform legislated (Royal Assent 26 June 2026), but Day 13's own
+task brief had explicitly instructed "follow the brief literally" on "not yet law" framing, and
+I complied with that explicit instruction rather than overriding it - so Day 13's content shipped
+using "announced... not yet in effect" language throughout, softened just enough to avoid the one
+specific claim (Bill still before Parliament) that was flatly false. This task corrects that:
+the framing constraint from Day 13 is lifted, and the content now says what the primary sources
+actually say - the reform is law, not pending.
+
+### Verification, click-verified before writing, not inherited from Day 13's own citations
+
+- **Federal Register of Legislation**, both Acts, fetched directly:
+  - Treasury Laws Amendment (Tax Reform No. 1) Act 2026 - **Act No. 49, 2026**, Royal Assent
+    **26 June 2026**, status **"In force."** Schedule 1 (CGT adjustments), Schedule 2 (limits
+    negative gearing for residential property to new builds).
+  - Income Tax Rates Amendment (Tax Reform No. 1) Act 2026 - **Act No. 50, 2026**, Royal Assent
+    **26 June 2026**, status **"In force."** Inserts the minimum-tax-rate mechanism into the
+    Income Tax Rates Act 1986.
+- **ATO measure page** (`ato.gov.au/.../tax-reform-boosting-home-ownership-...`): direct fetch
+  returned HTTP 403 (bot-blocked - the same, now-recurring pattern documented in
+  `docs/updating-tax-data.md` and multiple prior PROGRESS.md days). Cross-verified instead via
+  the page's own confirmed existence/title in search results plus two independent secondary
+  sources (The Adviser, Acumentis) that agree with each other and with the Federal Register on
+  every date.
+- **Commencement date cross-checked twice, deliberately**: one secondary source's AI-generated
+  summary (regfollower.com) initially suggested "1 July 2026" for the substantive changes -
+  this looked like exactly the kind of near-miss `docs/updating-tax-data.md` already warns
+  about, so it was independently re-verified rather than used. A direct fetch of a second,
+  more specific source (Acumentis, quoting the article text rather than summarizing it)
+  confirmed "1 July 2027" for both the negative gearing and CGT changes, matching the original
+  Budget factsheet primary source read in full on Day 13. The "1 July 2026" date turned out to
+  belong to a **different** measure in the same reform package (rate cuts + a new standard
+  work-related deduction - see the forward note below), not the NG/CGT provisions - a real
+  instance of the "a source's own label isn't sufficient confirmation on its own" lesson
+  `docs/updating-tax-data.md` already documents from Day 3.5, caught the same way: cross-check
+  against a second, more specific source rather than trust the first one.
+- **Senate amendments**: confirmed via two independent sources that, as a condition of Greens
+  support, new SMSF limited recourse borrowing arrangements (LRBAs) are now restricted to
+  business real property - an SMSF can no longer take out a **new** LRBA for residential
+  property (existing arrangements unaffected). A second claim surfaced by only one
+  (unconfirmable, 403-blocked) source - that the Senate stripped several ministerial
+  discretionary powers (on the new-build definition, loss-quarantining exemptions, and which
+  CGT assets keep the 50% discount) - could not be independently verified via a second direct
+  fetch (a second source explicitly said it didn't cover this), so it was **left out of the
+  articles** rather than asserted on single-source, unverifiable grounds.
+- **Discretionary trust measure confirmed genuinely separate and still not law**: a 30% minimum
+  tax on discretionary trusts, announced at the same Budget, proposed to start 1 July 2028 - no
+  Bill introduced as of this review, still just an announcement. Included in both articles as an
+  explicit contrast case ("this measure is enacted; that one isn't") rather than left implicit.
+
+### Content changes
+
+- **Both articles rewritten start to finish**, not patched: new titles, descriptions, and lead
+  paragraphs state "now law" plainly (Act numbers, Royal Assent date, "In force" status) before
+  getting into what commences when. Added a "What the Senate changed" section (SMSF LRBA ban)
+  to the negative gearing article, and a "What's still pending" section to both, contrasting
+  ATO guidance/tooling not yet published (mechanism is law; step-by-step calculation guidance
+  isn't published yet) against the discretionary trust measure (not law at all). Kept the
+  "Questions for your registered tax agent" sections and `draft: true` unchanged per the task.
+- **Property cash flow calculator's status note** rewritten: "models current-law treatment...
+  legislated changes... commence 1 July 2027... which regime applies then depends on your
+  purchase date and property type... grandfathered under current treatment until sold" (one
+  sentence, as asked) - no "announced," no "not yet in effect," no "would." Test updated to
+  assert the new wording positively and assert the old wording's absence
+  (`.not.toMatch(/not yet in effect|announced changes|would limit/i)`), so a future edit that
+  reintroduces stale framing fails loudly instead of silently passing.
+- **Grep-swept `content/` and `src/` for the banned phrasing class** ("not yet in effect", "not
+  yet law", "isn't law yet", "would limit/affect/work", "announced changes", "subject to
+  passage") - zero remain outside the negative test assertion itself and the two articles'
+  correctly-scoped descriptions of the *discretionary trust* measure (which genuinely is still
+  only announced - not a stale leftover, the intended contrast).
+
+### `docs/updating-tax-data.md` additions
+
+- **New §6, "Legal status verification"**: any claim about legislation status (announced,
+  introduced, passed, assented, in force) - in an article, calculator copy, or a task's own
+  brief - must be re-verified against the Federal Register and/or the ATO page at the time of
+  writing, never inherited from the ticket's own wording or from what a prior article already
+  claims. Cites this incident (a brief's "not yet law" framing had gone stale by the time the
+  work landed) and Day 3.5's wrong-year HELP figures near-miss as the two precedents for the
+  same underlying lesson: a label - a ticket's framing, a source's year in its title - is not
+  verification on its own.
+- **New "Looking ahead" note**: flags, without building, that `fy2026-27.ts` will need more than
+  routine 1 July indexation - the same reform package legislated income tax rate cuts and a new
+  standard work-related deduction commencing **1 July 2026**, a full year before the NG/CGT
+  changes and a new-mechanism change, not a moved threshold. A future day should click-verify
+  these specifically rather than assume they're an ordinary indexation delta.
+
+### Deviations
+
+- Left out the "Senate removed ministerial discretionary powers" claim from both articles -
+  sourced from only one search-synthesized result that a direct fetch couldn't independently
+  confirm (403-blocked), and a second source explicitly didn't address it. Judgment call:
+  omit rather than assert on single-source grounds, consistent with the new §6 rule this task
+  itself adds to `docs/updating-tax-data.md`.
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content &&
+  npm run test:coverage && npm run build`. 289 tests, 100% coverage. Same class of transient
+  full-suite-only test timeouts seen on Day 13 recurred three times in a row on this same
+  machine (`checklists/page.test.tsx`, `tax-profile-summary.test.tsx`, and once
+  `validate-content-script.test.ts` - none touched by this day's diff, all pass individually).
+  System memory was genuinely low (4.46GB free of 31GB) from unrelated desktop load, not
+  something introduced by this work - confirmed the fix by running
+  `vitest run --coverage --no-file-parallelism` (serial instead of parallel workers), which
+  passed clean on the first attempt with the exact same test files. Recorded here rather than
+  silently retried into a green run with no explanation, per this project's own standard for
+  distinguishing "flaky, pre-existing, and diagnosed" from "quietly ignored."
+- `npm run test:e2e`: full suite green, 41/41, run serially (`--workers=1`) for the same
+  resource-contention reason above.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off
