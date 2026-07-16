@@ -71,19 +71,25 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-semibold">Dashboard</h1>
+      {/* Day 12 Part B hero moment - see docs/design.md's Component patterns + Divergences
+          entries for the contrast reasoning (gradient alpha fixed at 0.12, safe for every text
+          color actually placed on it here: textPrimary, textSecondary, and the accent-colored
+          link). */}
+      <div className="rounded-xl bg-gradient-hero p-6 shadow-glow-sm">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
 
-      {nextKeyDate && (
-        <p className="text-sm text-textSecondary">
-          Next key date:{" "}
-          <Link
-            href="/tax-dates"
-            className="font-medium text-accent underline-offset-4 hover:underline"
-          >
-            {nextKeyDate.title} — {formatKeyDate(nextKeyDate.date)}
-          </Link>
-        </p>
-      )}
+        {nextKeyDate && (
+          <p className="mt-2 text-sm text-textSecondary">
+            Next key date:{" "}
+            <Link
+              href="/tax-dates"
+              className="font-medium text-accent underline-offset-4 hover:underline"
+            >
+              {nextKeyDate.title} — {formatKeyDate(nextKeyDate.date)}
+            </Link>
+          </p>
+        )}
+      </div>
 
       <Card variant="elevated">
         <CardHeader>

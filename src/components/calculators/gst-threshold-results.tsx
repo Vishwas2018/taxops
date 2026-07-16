@@ -16,8 +16,16 @@ function formatCurrency(amount: number): string {
 
 export function GstThresholdResults({ data }: { data: GstThresholdProjectionResult }) {
   return (
-    <Card variant="elevated" aria-live="polite" role="region" aria-label="Calculator results">
-      <CardHeader>
+    <Card
+      variant="elevated"
+      className="rounded-xl shadow-glow-md"
+      aria-live="polite"
+      role="region"
+      aria-label="Calculator results"
+    >
+      {/* Day 12 Part B hero moment - see contractor-take-home-results.tsx for the contrast
+          reasoning (docs/design.md has the full writeup). */}
+      <CardHeader className="-mt-(--card-spacing) rounded-t-xl bg-gradient-hero pt-(--card-spacing)">
         <CardTitle>Estimated results — FY{data.financialYear}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -38,7 +46,12 @@ export function GstThresholdResults({ data }: { data: GstThresholdProjectionResu
               <span className="tabular-nums">{data.weekThresholdCrossed}</span> of the financial
               year (around {data.monthThresholdCrossed}).
             </p>
-            <p className="text-muted-foreground">
+            {/* text-textSecondary, not text-muted-foreground: Day 12 Part B's axe sweep found
+                textMuted on this box's bg-neutralSubtle only clears 4.39:1, just under WCAG AA's
+                4.5:1 floor for normal text - a pre-existing bug, not something this task's own
+                hero-gradient change introduced (this box is in CardContent, untouched by that
+                change) but caught by the same sweep. textSecondary clears 6.87:1 here. */}
+            <p className="text-textSecondary">
               Once turnover reaches the ATO&apos;s{" "}
               <span className="tabular-nums">{formatCurrency(data.registrationThreshold)}</span>{" "}
               mandatory registration threshold, there is an obligation to register for GST within
@@ -61,7 +74,7 @@ export function GstThresholdResults({ data }: { data: GstThresholdProjectionResu
               <span className="tabular-nums">{formatCurrency(data.marginBelowThreshold ?? 0)}</span>
               .
             </p>
-            <p className="text-muted-foreground">
+            <p className="text-textSecondary">
               Registering for GST isn&apos;t mandatory while turnover stays below the ATO&apos;s{" "}
               <span className="tabular-nums">{formatCurrency(data.registrationThreshold)}</span>{" "}
               threshold. Voluntary registration below the threshold is allowed and has

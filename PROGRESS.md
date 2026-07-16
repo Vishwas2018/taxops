@@ -2610,6 +2610,99 @@ clear - explicitly no new calculators, no dark mode, no CGT estimator in the mea
   at least one independent secondary source, per this project's standing verification
   discipline - not spot-checked, per this task's own instruction.
 
+## Day 12 Part B — UI polish: hero moments (2026-07-16)
+
+### Deviation, logged up front: self-review, not the external audit this task named
+
+The task's own findings section arrived as the literal unfilled placeholder text
+(`[PASTE — external audit from screenshot review, plus my own gut reactions]`), and the task's
+own title said "HOLD until notes exist." Rather than repeat the Day 11 mistake (silently treating
+an unfilled template as "no issues") or fabricate findings and attribute them to an "external
+audit" that never happened, this was surfaced to the human directly. Given the choice of
+pausing entirely, doing a self-review, or providing real notes, the human chose **self-review**:
+an agent-run pass against `docs/design.md`'s own vocabulary, screen by screen, explicitly not
+the independent external check `docs/pending-human-verification.md`'s Day 12 Part B item says an
+agent auditing its own UI can't substitute for. That pending-human-verification.md entry **stays
+open** after this task - this closes out the polish work, not the verification gate.
+
+### What "hero moments, restrained" means here
+
+Per `docs/design-theme-source.md`'s glass/glow section, light mode has its own (previously
+under-documented) spec: glow at exactly half the dark-mode alpha, restricted to accent elements
+only (primary button, **hero card**, active nav indicator), decorative only. `docs/design.md`'s
+own Divergences entry had summarized this as "no light-mode equivalent worth building alone" -
+an oversimplification of what the source actually says, corrected in this task's docs update.
+Scoped to exactly two hero moments, per the task's own instruction: the dashboard header, and
+each calculator's results panel (its own "hero card").
+
+**New tokens** (`src/app/globals.css`): `--gradient-hero` (radial, top-right, alpha **0.12** -
+inside the source's 0.08-0.18 range) and `--shadow-glow-sm`/`--shadow-glow-md` (half the
+source's dark-mode glow alphas, per its own light-mode rule). A `@utility bg-gradient-hero`
+Tailwind v4 utility wires the gradient into the class system (participates in the cascade
+properly, unlike a bare unlayered rule).
+
+**Contrast math done before picking the alpha, not after** (design.md's non-negotiable rule 1 -
+every token change carries an inline contrast note): computed via the WCAG relative-luminance
+formula, not eyeballed.
+
+| Text color | On plain surface | On gradient @ 0.12 (worst case, gradient's own origin point) |
+|---|---|---|
+| textPrimary | 19.7:1 | 14.81:1 |
+| textSecondary | 8.0:1 | 6.31:1 |
+| accent-as-text (dashboard's "Next key date" link) | 6.29:1 | 5.25:1 |
+| accentOnSurface | 9.43:1 | 8.29:1 |
+| **textMuted** | **4.83:1 (already the floor)** | **drops below 4.5:1 AA at any alpha ≥~0.05** |
+
+textMuted's razor-thin baseline margin means the gradient is **never** placed behind it - it's
+confined to each results Card's `CardHeader` band only (title text, always `textPrimary`) via a
+negative-margin bleed (`-mt-(--card-spacing) pt-(--card-spacing) rounded-t-xl bg-gradient-hero`)
+so the band still reaches the card's rounded corners without the outer `Card`'s own background
+carrying the gradient into `CardContent` (where every `dt` label is `textMuted`). The outer Card
+itself gets `rounded-xl` (hero radius) + `shadow-glow-md` (replaces `shadow-raised` - the
+source's own glow tokens already bundle an accent-tinted lift shadow as their second layer, so
+this isn't "missing" elevation, it's substituting an accent-tinted one by design). The dashboard
+header wraps its `h1` + "next key date" line in one `rounded-xl bg-gradient-hero shadow-glow-sm`
+band directly (no bleed trick needed - nothing `textMuted`-colored lives there).
+
+### A real, pre-existing contrast bug found along the way (not introduced by this task)
+
+Extending `axe-scans.spec.ts` to actually scan each calculator's **results** state (the
+pre-existing suite only ever scanned the empty form - the results Card is conditionally
+rendered, so nothing before this task had ever axe-scanned it) surfaced a genuine WCAG AA
+failure in three calculators' explainer boxes: `text-muted-foreground` on `bg-neutralSubtle`
+measures 4.39:1, just under the 4.5:1 AA floor (confirmed independently via the same
+relative-luminance calculation - axe's own reported ratio matched exactly). Confirmed via `git
+diff` that none of this task's own edits touch those boxes - a pre-existing bug the new axe
+coverage happened to catch, not a regression. Fixed the same way in all three places
+(`gst-threshold-results.tsx` x2, `property-cash-flow-results.tsx`, `tax-set-aside-results.tsx`):
+swapped to `text-textSecondary` (6.87:1 on the same background), an existing token, not a new
+one - in-vocabulary per this task's own "no redesign outside the token vocabulary" rule.
+
+### Disclaimer prominence re-checked after every change
+
+Every calculator's `<Disclaimer variant="calculator" />` sits inside `CardContent`, below the
+`CardHeader` where the gradient lives, and the "calculator" variant already renders its own
+opaque `bg-neutralSubtle` box independent of whatever the Card's own background is - confirmed
+structurally (not just assumed) that no hero-moment change touches the disclaimer's own
+container or text color. `/tax-dates`'s `Disclaimer variant="inline"` and the dashboard's own
+lack of a calculator disclaimer are both untouched by this task's two hero-moment surfaces.
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content &&
+  npm run test:coverage && npm run build`. 367 tests, 100% coverage on
+  `src/lib/calculators/**` (unaffected - this task touched only components/CSS/docs).
+- `npm run test:e2e`: full suite green, 50/50 (5 new: the axe scan of each calculator's results
+  panel), run serially. `e2e/accessibility/axe-scans.spec.ts` specifically: **10/10 passed**,
+  including the WCAG AA failure found and fixed above (re-ran after the fix to confirm clean).
+- Audit screenshot set (`e2e/screenshots/audit/`) regenerated - all 17 captures re-run so every
+  hero-moment surface reflects the actual shipped CSS, not just the 6 directly touched. Before/
+  after pairs for the 6 hero-moment screens (dashboard + 5 calculator results panels) presented
+  as an artifact for review - screenshots captured via Playwright at 1280×900, not mocked or
+  hand-edited.
+- `docs/pending-human-verification.md`'s Day 12 Part B item **left open** - this closes the
+  polish work the item was blocking, not the external-audit gate itself.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off

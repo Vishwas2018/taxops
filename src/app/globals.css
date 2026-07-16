@@ -65,6 +65,23 @@
 
   /* Slate-tinted shadows, light mode only */
   --shadow-color: 15 23 42;
+
+  /*
+   * Day 12 Part B: the source theme's hero gradient (docs/design-theme-source.md's "Gradients"
+   * section), restrained to two hero moments only (dashboard header, calculator results panel
+   * headers) - see docs/design.md's Divergences entry. Alpha fixed at 0.12, inside the source's
+   * 0.08-0.18 range: contrast-verified (WCAG relative-luminance formula) against every text
+   * color actually placed on top of it in those two spots - textPrimary 14.81:1, textSecondary
+   * 6.31:1, accent-as-text (the dashboard's "Next key date" link) 5.25:1, accentOnSurface
+   * 8.29:1, all still comfortably ≥4.5:1 AA at this alpha. Deliberately NOT applied behind
+   * `textMuted`-colored text (the calculator results' `dt` labels): textMuted's baseline
+   * contrast on a plain white surface is only 4.83:1, and this gradient's alpha already drops
+   * it below 4.5:1 AA at any value ≥~0.05 - inside the source's own 0.08-0.18 floor. This is why
+   * the gradient is scoped to each results Card's *header* band only (title text is always
+   * textPrimary), never the content rows below it - see the results components for the actual
+   * scoping.
+   */
+  --gradient-hero: radial-gradient(circle at top right, rgb(var(--accent) / 0.12), transparent 60%);
 }
 
 @theme inline {
@@ -163,6 +180,29 @@
   --shadow-raised: 0 6px 20px rgb(var(--shadow-color) / 0.10), 0 2px 6px rgb(var(--shadow-color) / 0.06);
   --shadow-popover: 0 20px 48px rgb(var(--shadow-color) / 0.13), 0 6px 14px rgb(var(--shadow-color) / 0.08);
   --shadow-floating: 0 16px 40px rgb(var(--shadow-color) / 0.13), 0 4px 12px rgb(var(--shadow-color) / 0.08);
+
+  /*
+   * Day 12 Part B: light-mode glow, at exactly half the dark-mode alpha values
+   * docs/design-theme-source.md's glass/glow table specifies (glow-sm 0.25 -> 0.125,
+   * glow-md's two layers 0.35/0.20 -> 0.175/0.10), restricted to accent elements only per that
+   * same source note - here, the two hero moments' Cards (replaces shadow-raised on them, not
+   * layered with it - the source's own glow tokens already bundle their own accent-tinted lift
+   * shadow as the second value, so this isn't "missing" the neutral elevation shadow, it's
+   * substituting an accent-tinted one by design). Decorative only, never a state's sole
+   * indicator - both hero surfaces this is used on also keep their own text/heading content
+   * as the actual signal.
+   */
+  --shadow-glow-sm: 0 0 8px rgb(var(--accent) / 0.125);
+  --shadow-glow-md: 0 0 20px rgb(var(--accent) / 0.175), 0 4px 12px rgb(var(--accent) / 0.1);
+}
+
+/*
+ * `bg-gradient-hero` utility (Tailwind v4 `@utility`, participates in the utilities cascade
+ * layer like any built-in class - composes with variants/twMerge normally, unlike a bare
+ * unlayered rule). See --gradient-hero above for the contrast reasoning.
+ */
+@utility bg-gradient-hero {
+  background-image: var(--gradient-hero);
 }
 
 @layer base {

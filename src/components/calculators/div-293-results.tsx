@@ -23,8 +23,16 @@ export function Div293Results({ data }: { data: Div293Result }) {
   const state = stateFor(data);
 
   return (
-    <Card variant="elevated" aria-live="polite" role="region" aria-label="Calculator results">
-      <CardHeader>
+    <Card
+      variant="elevated"
+      className="rounded-xl shadow-glow-md"
+      aria-live="polite"
+      role="region"
+      aria-label="Calculator results"
+    >
+      {/* Day 12 Part B hero moment - see contractor-take-home-results.tsx for the contrast
+          reasoning (docs/design.md has the full writeup). */}
+      <CardHeader className="-mt-(--card-spacing) rounded-t-xl bg-gradient-hero pt-(--card-spacing)">
         <CardTitle>Estimated results — FY{data.financialYear}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

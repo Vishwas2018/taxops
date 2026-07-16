@@ -111,6 +111,12 @@ display. Scale: `display` 48px/1.05/−0.02em (hero numbers) · `h1` 32px · `h2
   are alpha steps (`/90`, `/80`) of the same color, not new colors.
 - **Card** (`src/components/ui/card.tsx`): base `rounded-lg border border-border bg-surface`;
   `variant="elevated"` adds `shadow-raised`; `variant="interactive"` adds hover lift + `tabIndex=0`.
+- **Hero moment** (Day 12 Part B, restrained to the dashboard header and calculator results
+  panels only - not a `Card` variant, applied ad hoc via `className` since only two call sites
+  exist): outer container gets `rounded-xl` (hero radius) + `shadow-glow-md`/`shadow-glow-sm`
+  (replaces `shadow-raised`, doesn't layer with it); a `bg-gradient-hero` wash sits only behind
+  `textPrimary`/`textSecondary`/accent-colored content, never behind `textMuted` text - see the
+  Divergences entry below for why.
 - **Pill / Badge** (`src/components/ui/badge.tsx`): `rounded-full`, subtle-bg + OnSurface-text
   pairs (`bg-accentSubtle text-accentOnSurface`, etc.).
 - **Focus ring (global)**: `*:focus-visible { outline: 2px solid accentOnSurface; outline-offset:
@@ -132,8 +138,25 @@ display. Scale: `display` 48px/1.05/−0.02em (hero numbers) · `h1` 32px · `h2
   (not FamilyFlux's `.dark` class), so a future dark pass only has to add token values and a
   toggle, not rewire selectors. Reason: zero v1 requirement, and shipping it means re-testing
   every surface pair plus the glass/glow system — real scope with no near-term payoff.
-- **Glass/glow system deferred with dark mode** — it's dark-mode-only in the source and has no
-  light-mode equivalent worth building alone.
+- **Glass system stays deferred with dark mode** — it's genuinely dark-mode-only in the source
+  (no light-mode glass variant exists to build).
+- **Glow + `--gradient-hero`: partially un-deferred, Day 12 Part B.** The source's glow table
+  sits under a "dark mode only" heading, but the same section's own text specifies a light-mode
+  variant directly ("glow at exactly half alpha, restricted to accent elements only... hero
+  card... decorative, never a state's sole indicator") - this doc's earlier "no light-mode
+  equivalent" note undersold what the source actually says. Day 12 Part B implements that
+  light-mode variant, restrained to exactly the two surfaces the source's own "accent elements
+  only" list already implies (hero card, and by extension a page's own hero heading):
+  the dashboard header and each calculator's results panel - see `globals.css` for
+  `--gradient-hero` (alpha fixed at 0.12, inside the source's 0.08-0.18 range) and
+  `--shadow-glow-sm`/`--shadow-glow-md` (half the source's dark-mode alphas). **Scoping detail
+  driven by contrast, not aesthetics**: the gradient never sits behind `textMuted`-colored text
+  (calculator results' `dt` labels) - that token's baseline contrast on a white surface is only
+  4.83:1, and the gradient drops it below 4.5:1 AA at any alpha ≥~0.05, inside the source's own
+  floor. Each results Card's gradient is confined to its `CardHeader` band (title text only,
+  always `textPrimary`, 14.81:1 even at this alpha) via a negative-margin bleed so it still
+  reaches the card's rounded corners; `CardContent` (the actual number rows) stays on plain
+  `bg-surface`, untouched. Full contrast workings in PROGRESS.md's Day 12 Part B entry.
 - **`secondary` (orange-700) reassigned.** Source role was "growth metrics, near-limit
   warnings," which collides with TaxOps' existing `warning` (amber) semantic — two
   orange-adjacent signals in a tax app risks muddying "this is a caution" vs "this is a

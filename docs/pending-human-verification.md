@@ -69,14 +69,18 @@ right.
 
 **Outstanding**: Day 12 Part A (2026-07-15) fixed the *findings* from the Day 11.9 self-audit
 (mobile nav, disclaimer duplication, radii, elevation). It did not do a fresh design pass over
-everything shipped since — Day 12 Part B, a proper design audit plus polish notes covering the
-current build (new calculators, the tax-dates timeline, the FY selector UI), has not happened.
-No PROGRESS.md entry exists for a "Day 12 Part B" because it hasn't been done yet.
+everything shipped since. A "Day 12 Part B" task did land (2026-07-16, see PROGRESS.md) - two
+restrained hero moments (dashboard header, calculator results panels) plus a real contrast bug
+fix it turned up along the way - but its own findings/notes input arrived unfilled, so what
+shipped was an **agent self-review** against `docs/design.md`'s vocabulary, not the external
+audit this item was actually asking for. This item stays open on that basis.
 
 **Why an agent can't close this**: a design audit is a subjective visual/UX review by design —
-an agent auditing its own UI output isn't the independent check the audit is meant to be. The
-regenerated `e2e/screenshots/audit/*` set (this entry) exists specifically to give that human
-review something current to look at.
+an agent auditing its own UI output isn't the independent check the audit is meant to be (the
+2026-07-16 pass proves the point in practice, not just in theory - it could self-review the two
+hero moments it was told to build, but had nothing to say about anything else that might need
+attention). The regenerated `e2e/screenshots/audit/*` set (both this entry and the 2026-07-16
+before/after set) exists specifically to give that human review something current to look at.
 
 **Blocks**: Day 12 Part B itself, and any further visual/UX polish work that would want to build
 on an agreed baseline rather than guess at one.

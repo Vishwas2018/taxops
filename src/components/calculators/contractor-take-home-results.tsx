@@ -34,8 +34,19 @@ export function ContractorTakeHomeResults({
   }
 
   return (
-    <Card variant="elevated" aria-live="polite" role="region" aria-label="Calculator results">
-      <CardHeader>
+    <Card
+      variant="elevated"
+      className="rounded-xl shadow-glow-md"
+      aria-live="polite"
+      role="region"
+      aria-label="Calculator results"
+    >
+      {/* Day 12 Part B hero moment - gradient confined to this header band (title text is
+          always textPrimary, safe at this alpha) via a negative-margin bleed so it still
+          reaches the card's rounded corners; CardContent below stays plain since its `dt`
+          labels use textMuted, which the gradient is not contrast-safe behind - see
+          docs/design.md. */}
+      <CardHeader className="-mt-(--card-spacing) rounded-t-xl bg-gradient-hero pt-(--card-spacing)">
         <CardTitle>
           Estimated results — FY{takeHome.financialYear}
         </CardTitle>
