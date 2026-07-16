@@ -28,6 +28,25 @@ const ATO_PAYDAY_SUPER_DEADLINES_URL =
  * secondary sources to fall on 1 March 2027, not the naive 28 February 2027 - 28 February 2027
  * is a Sunday, and the ATO rule states a due date landing on a weekend or public holiday shifts
  * to the next business day.
+ *
+ * **Day 15.5 correction**: `individual-lodgment-self` was originally dated 31 October 2026 (the
+ * naive fixed calendar date) - 31 October 2026 is actually a Saturday, so the real self-lodge
+ * deadline shifts to the next business day, Monday 2 November 2026. Click-verified via two
+ * independent secondary sources both stating the shifted date directly.
+ *
+ * **Day 15.5 logged exception, not forced**: `individual-lodgment-agent-extension`'s date, 15
+ * May 2027, is also a Saturday - but the ATO's own registered-agent-lodgment-program page
+ * states this exact date as the due date without shifting it (confirmed via a direct search
+ * of ato.gov.au's own "Individuals and trusts" lodgment-program page, which a direct fetch
+ * 403-blocks per this project's standing ato.gov.au access limitation - the search result
+ * itself surfaces the page's own stated content). This is a genuine rule exception, not a
+ * gap in verification: the 15 May date is an administratively-set lodgment-program concession
+ * date (the Commissioner's own published schedule), not a statutory deadline computed by a
+ * fixed formula the Acts Interpretation Act's weekend/public-holiday rule applies to the same
+ * way it applies to the 31 October self-lodge deadline above - the two dates are governed by
+ * different rules despite looking like the same kind of due date. Logged here and in
+ * PROGRESS.md's Day 15.5 entry rather than "corrected" to a shifted date that would in fact be
+ * wrong.
  */
 export const KEY_DATES_2026_27: KeyDate[] = [
   {
@@ -50,10 +69,10 @@ export const KEY_DATES_2026_27: KeyDate[] = [
   },
   {
     id: "individual-lodgment-self",
-    date: "2026-10-31",
+    date: "2026-11-02",
     title: "Individual tax return due (self-lodged)",
     description:
-      "The FY2025-26 individual tax return is due if lodging it yourself, without a registered tax agent.",
+      "The FY2025-26 individual tax return is due if lodging it yourself, without a registered tax agent. The standard 31 October 2026 due date falls on a Saturday, so it shifts to the next business day, 2 November 2026.",
     audience: ["everyone"],
     source: ATO_LODGMENT_DATES_URL,
     verified: true,
@@ -63,7 +82,7 @@ export const KEY_DATES_2026_27: KeyDate[] = [
     date: "2027-05-15",
     title: "Extended lodgment deadline (registered with a tax agent)",
     description:
-      "The later FY2025-26 lodgment deadline that applies when a registered tax agent takes on the return before 31 October 2026, under their lodgment program.",
+      "The later FY2025-26 lodgment deadline that applies when a registered tax agent takes on the return before 2 November 2026 (the shifted self-lodge deadline), under their lodgment program. 15 May 2027 itself falls on a Saturday, but the ATO's own lodgment program schedule publishes this exact date without a weekend shift - an administrative concession date, not a statutory deadline.",
     audience: ["everyone"],
     source: ATO_LODGMENT_DATES_URL,
     verified: true,

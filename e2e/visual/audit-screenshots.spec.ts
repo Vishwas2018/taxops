@@ -9,6 +9,13 @@ import { createE2ESupabaseAdminClient, getE2EUserId, resetE2EUserData } from "..
  * the numbered set that doc already describes. Re-run whenever a fresh external-review batch is
  * needed - no pass/fail assertion on the screenshots themselves, same "review artifact, not a
  * snapshot diff" approach as the existing visual spec.
+ *
+ * **Day 15.5 refresh**: extended with the surfaces added since this spec's last run (Day 11.9)
+ * - `gst-threshold` and `tax-set-aside` calculators (Day 14), `/tax-dates` (Day 14), and the
+ * mobile nav sheet opened (so its "Tax Dates" entry, added Day 14, is actually visible in a
+ * capture rather than just asserted in `mobile-nav.spec.ts`). The existing captures were also
+ * re-run so the contractor-take-home/div-293/property-cash-flow calculator screenshots show
+ * Day 15's FY selector and FY2026-27 default, not the pre-Day-15 single-year UI.
  */
 const DESKTOP_VIEWPORT = { width: 1280, height: 900 };
 const MOBILE_VIEWPORT = { width: 390, height: 844 };
@@ -75,6 +82,25 @@ test.describe("desktop captures", () => {
     await shoot(page, "calculator-property-cash-flow-filled");
   });
 
+  test("calculator: tax set-aside, filled with results", async ({ page }) => {
+    await page.goto("/calculators/tax-set-aside");
+    await fillNumberField(page.getByLabel("Day rate ($)"), "500");
+    await page.getByRole("button", { name: "Calculate", exact: true }).click();
+    await shoot(page, "calculator-tax-set-aside-filled");
+  });
+
+  test("calculator: GST threshold projector, filled with results", async ({ page }) => {
+    await page.goto("/calculators/gst-threshold");
+    await fillNumberField(page.getByLabel("Day rate ($)"), "800");
+    await page.getByRole("button", { name: "Calculate", exact: true }).click();
+    await shoot(page, "calculator-gst-threshold-filled");
+  });
+
+  test("tax dates timeline", async ({ page }) => {
+    await page.goto("/tax-dates");
+    await shoot(page, "tax-dates");
+  });
+
   test("tips index excludes draft articles, plus an article page", async ({ page }) => {
     await page.goto("/tips");
 
@@ -133,6 +159,13 @@ test.describe("mobile captures (390px)", () => {
   test("dashboard", async ({ page }) => {
     await page.goto("/dashboard");
     await shoot(page, "mobile-dashboard");
+  });
+
+  test("nav sheet open", async ({ page }) => {
+    await page.goto("/dashboard");
+    await page.getByRole("button", { name: "Open navigation menu" }).click();
+    await expect(page.getByRole("dialog", { name: "Menu" })).toBeVisible();
+    await shoot(page, "mobile-nav-open");
   });
 
   test("calculator: contractor take-home, filled", async ({ page }) => {

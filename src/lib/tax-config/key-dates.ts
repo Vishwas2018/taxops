@@ -19,6 +19,17 @@ const ATO_PAYG_INSTALMENTS_URL =
  * approximately a month - the Q4 (Apr-Jun 2026) due dates fall in July 2026, just after this
  * FY's own end date, but are included here since they're the obligation this FY's Q4 activity
  * creates and are what a user planning around FY2025-26 needs to see.
+ *
+ * **Day 15.5 correction**: `bas-q2`/`payg-instalment-q2` were originally dated 28 February 2026
+ * (a naive "28th of the month" assumption) - 28 February 2026 is actually a Saturday, so under
+ * the ATO's weekend/public-holiday due-date rule the real due date is the next business day,
+ * Monday 2 March 2026 (not Sunday 1 March). Click-verified against a professional lodgment-due-
+ * date calendar (Spectrum Accountants' 2026 BAS/IAS/Super due-date calendar PDF, which lists
+ * "02-Mar December 2025 quarter BAS due" directly) and cross-checked against a second,
+ * independent secondary source describing the same shift and reasoning. See
+ * `docs/updating-tax-data.md` and PROGRESS.md's Day 15.5 entry for the full sweep this fix was
+ * part of, including which other dates in this file were checked and found not to need the
+ * same correction.
  */
 export const KEY_DATES_2025_26: KeyDate[] = [
   {
@@ -70,9 +81,10 @@ export const KEY_DATES_2025_26: KeyDate[] = [
   },
   {
     id: "bas-q2",
-    date: "2026-02-28",
+    date: "2026-03-02",
     title: "Quarterly BAS due — Q2 (Oct-Dec 2025)",
-    description: "Quarterly Business Activity Statement due for the October-December 2025 quarter.",
+    description:
+      "Quarterly Business Activity Statement due for the October-December 2025 quarter. The standard 28 February 2026 due date falls on a Saturday, so it shifts to the next business day, 2 March 2026.",
     audience: ["contractor"],
     source: ATO_ACTIVITY_STATEMENTS_URL,
     verified: true,
@@ -143,9 +155,10 @@ export const KEY_DATES_2025_26: KeyDate[] = [
   },
   {
     id: "payg-instalment-q2",
-    date: "2026-02-28",
+    date: "2026-03-02",
     title: "PAYG instalment due — Q2 (Oct-Dec 2025)",
-    description: "Quarterly PAYG instalment due for the October-December 2025 quarter.",
+    description:
+      "Quarterly PAYG instalment due for the October-December 2025 quarter. The standard 28 February 2026 due date falls on a Saturday, so it shifts to the next business day, 2 March 2026.",
     audience: ["contractor", "property-investor"],
     source: ATO_PAYG_INSTALMENTS_URL,
     verified: true,

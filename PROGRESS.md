@@ -2517,6 +2517,99 @@ itself didn't move - but their calendar-month outputs independently recomputed v
   `src/lib/calculators/**`.
 - `npm run test:e2e`: full suite green.
 
+## Day 15.5 — Date correction + verification pause (2026-07-16)
+
+### Weekend/public-holiday due-date sweep
+
+Day 15's own entry noted, but explicitly did not fix (out of scope at the time), that
+FY2025-26's Q2 BAS/PAYGI due date (28 February 2026) is a Saturday. This task went back and
+fixed it, then swept **every** date in both `key-dates.ts` (FY2025-26) and `key-dates-2026-27.ts`
+(FY2026-27) for the same class of error - a due date landing on a weekend or national public
+holiday must actually be the next business day, not the naive "28th of the month" (or "31
+October", or "15 May") assumption.
+
+**Two real fixes, both click-verified against a primary/professional source plus one independent
+secondary source, per this project's standing verification discipline:**
+
+- `key-dates.ts`'s `bas-q2`/`payg-instalment-q2`: 28 February 2026 (Saturday) → **2 March 2026**
+  (Monday, not Sunday 1 March). Verified via Spectrum Accountants' 2026 BAS/IAS/Super due-date
+  calendar (a professional lodgment-due-date PDF explicitly listing "02-Mar December 2025
+  quarter BAS due"), cross-checked against a second independent secondary source describing the
+  same shift and reasoning.
+- `key-dates-2026-27.ts`'s `individual-lodgment-self`: 31 October 2026 (Saturday) → **2 November
+  2026** (Monday). Verified via two independent secondary sources both stating the shifted date
+  directly.
+
+**One genuine rule exception, logged rather than forced, exactly as asked**:
+`individual-lodgment-agent-extension`'s date, 15 May 2027, is also a Saturday - but the ATO's
+own registered-agent-lodgment-program page (surfaced via search - direct fetch still 403s, per
+`docs/updating-tax-data.md` §2's standing limitation) publishes this exact date as the due date,
+unshifted. Researched why rather than assumed inconsistent with the two fixes above: 31 October
+is a statutory deadline (subject to the Acts Interpretation Act's weekend/public-holiday rule),
+while 15 May is an administratively-set lodgment-program concession date the Commissioner
+publishes directly each cycle - a different rule governs it, not a gap in this sweep. Logged in
+`key-dates-2026-27.ts`'s own doc comment, the new structural test below, and here.
+
+**Also checked and found to need no change** (verified, not assumed, as part of the same sweep):
+every other quarterly BAS/PAYGI/super-guarantee date in both files (all fall on a weekday);
+FY2026-27's Q2 BAS/PAYGI date (already correctly 1 March 2027, re-confirmed via two sources
+during Day 15's original construction and reconfirmed again here); Easter/Anzac Day/Australia
+Day dates for 2026-27, none of which coincide with any modeled due date; and the fact that 2
+March 2026 is also Western Australia's (state-only, not national) Labour Day - confirmed via
+search that the ATO's weekend-shift rule is defined around national public holidays only (a
+holiday that applies "for the whole of any state or territory" technically counts under the
+legal definition, but only extends the deadline for taxpayers in that state, not nationally) -
+this app models the national default only, an existing, undisturbed simplification, not a new
+gap this sweep introduced.
+
+### Structural test, not per-date assertions
+
+`key-dates-weekend-rule.test.ts` (new): iterates every entry in both `KEY_DATES_2025_26` and
+`KEY_DATES_2026_27` and asserts none falls on a Saturday or Sunday, with a single documented
+exception (`individual-lodgment-agent-extension`, keyed per-dataset since the same `id` string
+is reused across both FY files and only the FY2026-27 one is the actual exception). A second
+test asserts the exception entry is itself still genuinely a weekend date, so an unrelated future
+edit that changes it to a weekday would fail loudly (a stale exception silently masking a real
+bug) rather than passing by accident. This is a structural pin, not a per-date golden test - it
+would have caught both of today's bugs directly without needing a human to notice the specific
+dates first.
+
+### Audit screenshot set regenerated for external design review
+
+Extended `e2e/visual/audit-screenshots.spec.ts` (last run Day 11.9) with every surface added
+since: the `tax-set-aside` and `gst-threshold` calculators (Day 14), `/tax-dates` (Day 14), and
+the mobile nav sheet opened (so its "Tax Dates" entry, added Day 14, is actually visible in a
+capture, not just asserted in `mobile-nav.spec.ts`). Re-ran the whole spec rather than only the
+new tests, so the existing contractor-take-home/div-293/property-cash-flow captures also reflect
+Day 15's FY selector and FY2026-27 default instead of the pre-Day-15 single-year UI. 17 desktop +
+mobile captures total (up from 14), all under `e2e/screenshots/audit/`, committed as review
+artifacts per this project's existing convention (no pass/fail assertion on the images
+themselves).
+
+### `docs/pending-human-verification.md` (new)
+
+Four outstanding items, each with what's blocking and why an agent can't close it out alone:
+the Day 10 §9 staging smoke test (blocks Day 10 close), Gate 2's article/calculator content
+review (blocks draft→published and a future CGT estimator's content pairing), Gate 3's HELP/STSL
+threshold click-verify (blocks full confidence in the FY2026-27 config), and a Day 12 Part B
+design audit + polish pass (blocks Day 12 Part B itself). Feature work stops here until these
+clear - explicitly no new calculators, no dark mode, no CGT estimator in the meantime.
+
+### Deviations
+
+- **None.**
+
+### Verification
+
+- Full quality loop green: `npm run typecheck && npm run lint && npm run validate:content &&
+  npm run test:coverage && npm run build`. 367 tests (3 new: the structural weekend-rule spec),
+  100% coverage on `src/lib/calculators/**`.
+- `npm run test:e2e`: full suite green, 45/45 (4 new: tax-set-aside, gst-threshold, tax-dates,
+  and mobile-nav-open captures), run serially.
+- Every changed/reconfirmed date backed by a click-verified primary or professional source plus
+  at least one independent secondary source, per this project's standing verification
+  discipline - not spot-checked, per this task's own instruction.
+
 ## Human gates (for reference)
 
 - ⛔ **Gate 1** (end of Day 3): FY2025-26 rate tables + ATO source URLs presented for sign-off
